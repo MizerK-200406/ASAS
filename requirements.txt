@@ -1,0 +1,20 @@
+# Core & API
+fastapi>=0.111.0
+uvicorn>=0.30.0
+pydantic>=2.7.0
+pydantic-settings>=2.2.0
+python-dotenv>=1.0.0
+
+# LLM Provider (NVIDIA NIM is OpenAI-compatible)
+openai>=1.30.0
+
+# Free External Tools
+duckduckgo-search>=6.0.0
+
+# Observability & Logging
+loguru>=0.7.2
+
+# Testing (TDD)
+pytest>=8.0.0
+pytest-asyncio>=0.23.0
+pytest-mock>=3.14.0
