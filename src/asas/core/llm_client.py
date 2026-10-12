@@ -31,13 +31,17 @@ class LLMClient:
         )
 
     def _clean_json_text(self, text: str) -> str:
-        """Loại bỏ markdown fences (```json ... ```) nếu LLM vô tình bọc lại."""
+        """Loại bỏ markdown fences (```json ... ```) hoặc trích xuất khối JSON từ phản hồi."""
         text = text.strip()
-        # Loại bỏ ```json ở đầu và ``` ở cuối
-        pattern = r"^```(?:json)?\s*([\s\S]*?)\s*```$"
-        match = re.search(pattern, text)
+        # 1. Tìm khối markdown ```json ... ```
+        match = re.search(r"```(?:json)?\s*([\s\S]*?)\s*```", text)
         if match:
             return match.group(1).strip()
+        # 2. Nếu không có markdown fences, trích xuất từ dấu { đầu tiên đến } cuối cùng
+        start_obj = text.find("{")
+        end_obj = text.rfind("}")
+        if start_obj != -1 and end_obj != -1 and end_obj > start_obj:
+            return text[start_obj : end_obj + 1].strip()
         return text
 
     async def chat_completion(
@@ -56,7 +60,8 @@ class LLMClient:
                 temperature=temperature,
                 max_tokens=max_tokens,
             )
-            content = response.choices[0].message.content or ""
+            message = response.choices[0].message
+            content = message.content or getattr(message, "reasoning_content", "") or ""
             return content.strip()
         except APIError as e:
             logger.error(f"Lỗi API khi gọi LLM: {e}")
@@ -101,14 +106,17 @@ class LLMClient:
 
         raw_text = ""
         try:
+            # Lưu ý: Không ép cứng response_format={"type": "json_object"} vì trên NVIDIA NIM,
+            # một số phiên bản DeepSeek Reasoning (Flash/R1) sẽ đẩy toàn bộ nội dung vào reasoning_content và để content=None.
             response = await self.client.chat.completions.create(
                 model=target_model,
                 messages=formatted_messages,
                 temperature=temperature,
                 max_tokens=max_tokens,
-                response_format={"type": "json_object"},
             )
-            raw_text = response.choices[0].message.content or ""
+            message = response.choices[0].message
+            # Hỗ trợ lấy content và fallback reasoning_content nếu là reasoning model
+            raw_text = message.content or getattr(message, "reasoning_content", "") or ""
             clean_text = self._clean_json_text(raw_text)
 
             return response_model.model_validate_json(clean_text)
