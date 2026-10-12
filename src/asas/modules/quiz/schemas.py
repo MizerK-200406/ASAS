@@ -1,5 +1,5 @@
 from enum import Enum
-from typing import List, Optional
+from typing import Any, Dict, List, Optional
 from pydantic import BaseModel, Field, model_validator
 
 
@@ -57,3 +57,12 @@ class Quiz(BaseModel):
     title: str = Field(..., description="Tiêu đề của bài kiểm tra")
     topic: str = Field(..., description="Chủ đề")
     questions: List[QuizQuestion] = Field(..., min_length=1, description="Danh sách các câu hỏi")
+
+
+class QuizGradeResult(BaseModel):
+    """Kết quả chấm điểm và đánh giá chi tiết bài trắc nghiệm."""
+    total_questions: int = Field(..., description="Tổng số câu hỏi trong bài thi")
+    correct_count: int = Field(..., description="Số lượng câu trả lời đúng")
+    score_percentage: float = Field(..., description="Tỷ lệ điểm phần trăm (0.0 - 100.0)")
+    details: List[Dict[str, Any]] = Field(default_factory=list, description="Chi tiết đánh giá từng câu hỏi")
+
