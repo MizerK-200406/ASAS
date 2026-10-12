@@ -44,7 +44,7 @@ class LLMClient:
         self,
         messages: List[Dict[str, str]],
         model: Optional[str] = None,
-        temperature: float = 0.7,
+        temperature: float = 0.2,
         max_tokens: int = 2048,
     ) -> str:
         """Gửi prompt và nhận phản hồi dạng văn bản thông thường từ LLM."""
