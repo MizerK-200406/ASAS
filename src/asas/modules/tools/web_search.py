@@ -32,7 +32,7 @@ class WebSearchTool(BaseTool):
     def _raw_search(self, query: str, max_results: int) -> List[Dict[str, str]]:
         """Hàm đồng bộ gọi DuckDuckGo Search API."""
         with DDGS() as ddgs:
-            return list(ddgs.text(keywords=query, max_results=max_results))
+            return list(ddgs.text(query, max_results=max_results))
 
     async def execute(self, query: str = "", max_results: int = 5, **kwargs: Any) -> ToolResult:
         """Thực thi tìm kiếm web bất đồng bộ và format kết quả tối ưu cho LLM."""
