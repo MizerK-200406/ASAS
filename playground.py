@@ -20,6 +20,7 @@ from asas.modules.quiz.schemas import DifficultyLevel, QuizGenerationRequest
 from asas.modules.quiz.service import QuizService
 from asas.modules.flashcard.schemas import FlashcardGenerationRequest
 from asas.modules.flashcard.service import FlashcardService
+from asas.modules.tools.calculator import CalculatorTool
 
 
 async def main():
@@ -37,13 +38,15 @@ async def main():
 
     quiz_service = QuizService()
     flashcard_service = FlashcardService()
+    calculator_tool = CalculatorTool()
 
     while True:
         print("\n--- MENU TRẢI NGHIỆM ---")
         print("1. Tạo bộ câu hỏi trắc nghiệm (Quiz) & Làm bài thử")
         print("2. Tạo bộ thẻ ghi nhớ (Flashcards)")
+        print("3. Dùng thử công cụ Calculator (Tính toán toán học an toàn)")
         print("0. Thoát")
-        choice = input("\nChọn chức năng (0/1/2): ").strip()
+        choice = input("\nChọn chức năng (0/1/2/3): ").strip()
 
         if choice == "0":
             print("Tạm biệt! Hẹn gặp lại bạn.")
@@ -115,6 +118,19 @@ async def main():
 
             except Exception as e:
                 print(f"❌ Lỗi khi tạo Flashcards: {e}")
+
+        elif choice == "3":
+            print("\n💡 Hỗ trợ: +, -, *, /, **, sqrt(), sin(), cos(), abs(), pi, e...")
+            expr = input("Nhập biểu thức cần tính (VD: sqrt(144) + 2**3, 25 * 4 + 10): ").strip()
+            if not expr:
+                expr = "sqrt(144) + 2**3"
+
+            print(f"\n⏳ Đang tính toán: '{expr}'...")
+            res = await calculator_tool.execute(expression=expr)
+            if res.success:
+                print(f"✅ KẾT QUẢ: {res.output}")
+            else:
+                print(f"❌ LỖI: {res.error}")
 
         else:
             print("Lựa chọn không hợp lệ, vui lòng chọn lại!")
