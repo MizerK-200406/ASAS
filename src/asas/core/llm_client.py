@@ -131,3 +131,97 @@ class LLMClient:
         except Exception as e:
             logger.error(f"Lỗi ngoài dự kiến: {e}")
             raise LLMClientError(f"Lỗi khi thực thi: {str(e)}") from e
+
+    async def chat_with_tools(
+        self,
+        messages: List[Dict[str, Any]],
+        tool_registry: Any,
+        model: Optional[str] = None,
+        temperature: float = 0.2,
+        max_iterations: int = 5,
+    ) -> str:
+        """Thực hiện hội thoại đa lượt có khả năng tự động gọi công cụ (Tool Calling Loop)."""
+        target_model = model or self.settings.default_model
+        openai_tools = tool_registry.get_openai_tools()
+
+        if not openai_tools:
+            return await self.chat_completion(
+                messages=messages,
+                model=target_model,
+                temperature=temperature,
+            )
+
+        conversation_history: List[Dict[str, Any]] = list(messages)
+
+        for iteration in range(max_iterations):
+            try:
+                response = await self.client.chat.completions.create(
+                    model=target_model,
+                    messages=conversation_history,
+                    tools=openai_tools,
+                    tool_choice="auto",
+                    temperature=temperature,
+                )
+            except APIError as e:
+                logger.error(f"Lỗi API khi gọi chat_with_tools: {e}")
+                raise LLMClientError(f"API Error: {str(e)}") from e
+            except Exception as e:
+                logger.error(f"Lỗi không xác định khi gọi chat_with_tools: {e}")
+                raise LLMClientError(f"Unexpected Error: {str(e)}") from e
+
+            choice = response.choices[0]
+            message = choice.message
+
+            # Nếu mô hình KHÔNG yêu cầu gọi tool nào -> Trả về câu trả lời cuối cùng
+            if not message.tool_calls:
+                content = message.content or getattr(message, "reasoning_content", "") or ""
+                return content.strip()
+
+            # Nếu mô hình YÊU CẦU gọi tool:
+            # 1. Bổ sung tin nhắn assistant kèm tool_calls vào lịch sử hội thoại
+            assistant_msg: Dict[str, Any] = {
+                "role": "assistant",
+                "content": message.content or "",
+                "tool_calls": [
+                    {
+                        "id": tc.id,
+                        "type": tc.type,
+                        "function": {
+                            "name": tc.function.name,
+                            "arguments": tc.function.arguments,
+                        },
+                    }
+                    for tc in message.tool_calls
+                ],
+            }
+            conversation_history.append(assistant_msg)
+
+            # 2. Thực thi từng tool call qua ToolRegistry và gửi kết quả lại cho mô hình
+            for tc in message.tool_calls:
+                fn_name = tc.function.name
+                fn_args = tc.function.arguments
+
+                logger.info(f"[Tool Loop] Điều phối gọi tool '{fn_name}' với tham số: {fn_args}")
+                tool_res = await tool_registry.execute_tool(name=fn_name, arguments=fn_args)
+
+                tool_output_str = (
+                    str(tool_res.output)
+                    if tool_res.success
+                    else f"Lỗi khi thực thi công cụ '{fn_name}': {tool_res.error}"
+                )
+
+                conversation_history.append({
+                    "role": "tool",
+                    "tool_call_id": tc.id,
+                    "name": fn_name,
+                    "content": tool_output_str,
+                })
+
+        # Nếu vượt quá số lượt lặp cho phép mà chưa có câu trả lời cuối cùng
+        logger.warning(f"Vượt quá số lượt lặp cho phép ({max_iterations}) trong chat_with_tools.")
+        return await self.chat_completion(
+            messages=conversation_history,
+            model=target_model,
+            temperature=temperature,
+        )
+

@@ -20,9 +20,11 @@ from asas.modules.quiz.schemas import DifficultyLevel, QuizGenerationRequest
 from asas.modules.quiz.service import QuizService
 from asas.modules.flashcard.schemas import FlashcardGenerationRequest
 from asas.modules.flashcard.service import FlashcardService
+from asas.core.llm_client import LLMClient
 from asas.modules.tools.calculator import CalculatorTool
 from asas.modules.tools.python_executor import PythonExecutorTool
 from asas.modules.tools.web_search import WebSearchTool
+from asas.modules.tools.registry import create_default_registry
 
 
 async def main():
@@ -43,6 +45,8 @@ async def main():
     calculator_tool = CalculatorTool()
     python_tool = PythonExecutorTool()
     search_tool = WebSearchTool()
+    llm_client = LLMClient()
+    tool_registry = create_default_registry()
 
     while True:
         print("\n--- MENU TRẢI NGHIỆM ---")
@@ -51,8 +55,9 @@ async def main():
         print("3. Dùng thử công cụ Calculator (Tính toán toán học an toàn)")
         print("4. Dùng thử công cụ Safe Python Sandbox (Chạy mã Python an toàn)")
         print("5. Dùng thử công cụ Web Search (Tìm kiếm internet miễn phí qua DuckDuckGo)")
+        print("6. Chat thông minh với Trợ lý AI (Tự động gọi Tool Calling: Math, Code, Search)")
         print("0. Thoát")
-        choice = input("\nChọn chức năng (0/1/2/3/4/5): ").strip()
+        choice = input("\nChọn chức năng (0/1/2/3/4/5/6): ").strip()
 
         if choice == "0":
             print("Tạm biệt! Hẹn gặp lại bạn.")
@@ -165,6 +170,46 @@ async def main():
                 print(f"\n✅ KẾT QUẢ TÌM KIẾM:\n{res.output}")
             else:
                 print(f"\n❌ LỖI TÌM KIẾM:\n{res.error}")
+
+        elif choice == "6":
+            print("\n" + "=" * 55)
+            print("💬 CHẾ ĐỘ CHAT THÔNG MINH (TOOL CALLING TỰ ĐỘNG)")
+            print("AI có thể tự động gọi Calculator, Python Sandbox, hoặc Web Search!")
+            print("Gõ 'exit' hoặc 'q' để quay lại menu chính.")
+            print("=" * 55 + "\n")
+
+            chat_history = [
+                {
+                    "role": "system",
+                    "content": (
+                        "Bạn là Trợ lý Học tập AI thông minh (ASAS). Bạn có quyền truy cập vào các công cụ: "
+                        "1. 'calculator' để tính toán biểu thức toán học. "
+                        "2. 'python_executor' để viết và chạy code Python an toàn khi cần thuật toán phức tạp hoặc xử lý logic. "
+                        "3. 'web_search' để tìm kiếm thông tin mới nhất trên Internet khi người dùng hỏi về kiến thức thực tế hoặc tin tức. "
+                        "Hãy chủ động phân tích câu hỏi của học sinh và gọi công cụ phù hợp để đưa ra câu trả lời chính xác nhất."
+                    ),
+                }
+            ]
+
+            while True:
+                prompt = input("\n👤 Bạn: ").strip()
+                if not prompt:
+                    continue
+                if prompt.lower() in ("exit", "q", "quit"):
+                    print("Quay lại menu chính...")
+                    break
+
+                chat_history.append({"role": "user", "content": prompt})
+                print("⏳ AI đang xử lý và điều phối công cụ (nếu cần)...")
+                try:
+                    response_text = await llm_client.chat_with_tools(
+                        messages=chat_history,
+                        tool_registry=tool_registry,
+                    )
+                    print(f"\n🤖 ASAS: {response_text}")
+                    chat_history.append({"role": "assistant", "content": response_text})
+                except Exception as e:
+                    print(f"❌ Lỗi khi trò chuyện: {e}")
 
         else:
             print("Lựa chọn không hợp lệ, vui lòng chọn lại!")

@@ -24,12 +24,17 @@ class BaseTool(ABC):
 
     def to_openai_tool(self) -> Dict[str, Any]:
         """Chuyển đổi thông tin định nghĩa công cụ sang chuẩn OpenAI Function Calling format."""
+        if self.args_schema is BaseModel or self.args_schema is None:
+            parameters = {"type": "object", "properties": {}}
+        else:
+            parameters = self.args_schema.model_json_schema()
+
         return {
             "type": "function",
             "function": {
                 "name": self.name,
                 "description": self.description,
-                "parameters": self.args_schema.model_json_schema(),
+                "parameters": parameters,
             },
         }
 
