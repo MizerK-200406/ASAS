@@ -22,6 +22,7 @@ from asas.modules.flashcard.schemas import FlashcardGenerationRequest
 from asas.modules.flashcard.service import FlashcardService
 from asas.modules.tools.calculator import CalculatorTool
 from asas.modules.tools.python_executor import PythonExecutorTool
+from asas.modules.tools.web_search import WebSearchTool
 
 
 async def main():
@@ -41,6 +42,7 @@ async def main():
     flashcard_service = FlashcardService()
     calculator_tool = CalculatorTool()
     python_tool = PythonExecutorTool()
+    search_tool = WebSearchTool()
 
     while True:
         print("\n--- MENU TRẢI NGHIỆM ---")
@@ -48,8 +50,9 @@ async def main():
         print("2. Tạo bộ thẻ ghi nhớ (Flashcards)")
         print("3. Dùng thử công cụ Calculator (Tính toán toán học an toàn)")
         print("4. Dùng thử công cụ Safe Python Sandbox (Chạy mã Python an toàn)")
+        print("5. Dùng thử công cụ Web Search (Tìm kiếm internet miễn phí qua DuckDuckGo)")
         print("0. Thoát")
-        choice = input("\nChọn chức năng (0/1/2/3/4): ").strip()
+        choice = input("\nChọn chức năng (0/1/2/3/4/5): ").strip()
 
         if choice == "0":
             print("Tạm biệt! Hẹn gặp lại bạn.")
@@ -149,6 +152,19 @@ async def main():
                 print(f"✅ OUTPUT:\n{res.output}")
             else:
                 print(f"❌ LỖI / CHẶN BẢO MẬT:\n{res.error}")
+
+        elif choice == "5":
+            print("\n🔍 DUCKDUCKGO WEB SEARCH (100% Free - Không cần API Key)")
+            query_input = input("Nhập từ khóa tìm kiếm (VD: FastAPI tutorial, Python 3.12 new features): ").strip()
+            if not query_input:
+                query_input = "Python 3.12 new features"
+
+            print(f"\n⏳ Đang tìm kiếm trên Internet: '{query_input}'...")
+            res = await search_tool.execute(query=query_input, max_results=3)
+            if res.success:
+                print(f"\n✅ KẾT QUẢ TÌM KIẾM:\n{res.output}")
+            else:
+                print(f"\n❌ LỖI TÌM KIẾM:\n{res.error}")
 
         else:
             print("Lựa chọn không hợp lệ, vui lòng chọn lại!")
