@@ -5,6 +5,9 @@ pydantic>=2.7.0
 pydantic-settings>=2.2.0
 python-dotenv>=1.0.0
 
+# Database & Storage (Local SQLite, 100% Free)
+aiosqlite>=0.20.0
+
 # LLM Provider (NVIDIA NIM is OpenAI-compatible)
 openai>=1.30.0
 
