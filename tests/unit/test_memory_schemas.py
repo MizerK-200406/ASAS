@@ -97,3 +97,55 @@ def test_sm2_review_result():
     assert result.interval_days == 6
     assert result.ease_factor == 2.6
     assert result.next_review == now
+
+
+def test_student_profile_extended_fields():
+    """Kiểm tra StudentProfile với các trường mở rộng: school, target_goal, learning_style, updated_at."""
+    profile = StudentProfile(
+        student_id="st_01",
+        name="Phạm Dương",
+        grade_level="Lớp 12",
+        school="THPT Chuyên Hà Nội - Amsterdam",
+        target_goal="Đạt 9.0 điểm môn Toán THPTQG",
+        learning_style="Socratic, trực quan",
+    )
+    assert profile.grade_level == "Lớp 12"
+    assert profile.school == "THPT Chuyên Hà Nội - Amsterdam"
+    assert profile.target_goal == "Đạt 9.0 điểm môn Toán THPTQG"
+    assert profile.learning_style == "Socratic, trực quan"
+    assert isinstance(profile.updated_at, datetime)
+
+
+def test_quiz_record_with_ai_feedback():
+    """Kiểm tra QuizRecord lưu trữ lời phê và đề xuất cải thiện của AI."""
+    record = QuizRecord(
+        student_id="st_01",
+        topic="Lượng giác",
+        score_percentage=66.7,
+        total_questions=3,
+        correct_count=2,
+        ai_praise="Em nắm vững các công thức cộng lượng giác cơ bản.",
+        ai_critique="Em còn nhầm dấu ở công thức nhân đôi cos(2x).",
+        improvement_plan="Xem lại bảng công thức trang 15 và làm thêm 3 bài tập biến đổi.",
+    )
+    assert record.ai_praise == "Em nắm vững các công thức cộng lượng giác cơ bản."
+    assert record.ai_critique == "Em còn nhầm dấu ở công thức nhân đôi cos(2x)."
+    assert record.improvement_plan == "Xem lại bảng công thức trang 15 và làm thêm 3 bài tập biến đổi."
+
+
+def test_student_activity_log_schema():
+    """Kiểm tra StudentActivityLog lưu lại vết hành động học sinh."""
+    from asas.modules.memory.schemas import StudentActivityLog
+
+    log = StudentActivityLog(
+        id="act_123",
+        student_id="st_01",
+        action_type="QUIZ_TAKEN",
+        description="Hoàn thành bài kiểm tra Lượng giác đạt 66.7%",
+    )
+    assert log.id == "act_123"
+    assert log.student_id == "st_01"
+    assert log.action_type == "QUIZ_TAKEN"
+    assert log.description == "Hoàn thành bài kiểm tra Lượng giác đạt 66.7%"
+    assert isinstance(log.created_at, datetime)
+

@@ -34,19 +34,37 @@ class StudentProfile(BaseModel):
     student_id: str
     name: str
     grade_level: Optional[str] = None
+    school: Optional[str] = None
     target_subjects: List[str] = Field(default_factory=list)
+    target_goal: Optional[str] = None
+    learning_style: Optional[str] = None
     created_at: datetime = Field(default_factory=utc_now)
+    updated_at: datetime = Field(default_factory=utc_now)
 
 
 class QuizRecord(BaseModel):
-    """Bản ghi kết quả bài trắc nghiệm của học sinh."""
+    """Bản ghi kết quả bài trắc nghiệm của học sinh kèm nhận xét của AI."""
 
     student_id: str
     topic: str
     score_percentage: float
     total_questions: int
     correct_count: int
+    ai_praise: Optional[str] = None
+    ai_critique: Optional[str] = None
+    improvement_plan: Optional[str] = None
     completed_at: datetime = Field(default_factory=utc_now)
+
+
+class StudentActivityLog(BaseModel):
+    """Nhật ký hoạt động của học sinh (làm quiz, ôn flashcard, chat trợ lý, dùng tools)."""
+
+    id: str
+    student_id: str
+    action_type: str
+    description: str
+    created_at: datetime = Field(default_factory=utc_now)
+
 
 
 class FlashcardProgress(BaseModel):
