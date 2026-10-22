@@ -54,15 +54,30 @@ class PlannerAgent:
                 stats = summary["quiz_stats"]
                 recent = summary["recent_quizzes"]
 
-                quiz_lines = [
-                    f"- Chủ đề: {q.topic} | Điểm: {q.score_percentage}% ({q.correct_count}/{q.total_questions})"
-                    for q in recent
-                ]
+                profile_details = [f"- Họ tên: {profile.name} (ID: {profile.student_id})"]
+                if profile.grade_level:
+                    profile_details.append(f"- Khối / Lớp: {profile.grade_level}")
+                if profile.school:
+                    profile_details.append(f"- Trường: {profile.school}")
+                if profile.target_goal:
+                    profile_details.append(f"- Mục tiêu học tập: {profile.target_goal}")
+                if profile.learning_style:
+                    profile_details.append(f"- Phong cách học: {profile.learning_style}")
+                profile_text = "\n".join(profile_details)
+
+                quiz_lines = []
+                for q in recent:
+                    line = f"- Chủ đề: {q.topic} | Điểm: {q.score_percentage}% ({q.correct_count}/{q.total_questions})"
+                    if q.ai_critique:
+                        line += f" | AI Nhận xét cần cải thiện: {q.ai_critique}"
+                    if q.improvement_plan:
+                        line += f" | Đề xuất: {q.improvement_plan}"
+                    quiz_lines.append(line)
                 recent_text = "\n".join(quiz_lines) if quiz_lines else "Chưa có bài quiz nào."
 
                 memory_context = (
                     f"\n\n[HỒ SƠ HỌC SINH TỪ CƠ SỞ DỮ LIỆU]:\n"
-                    f"- Họ tên: {profile.name} (ID: {profile.student_id})\n"
+                    f"{profile_text}\n"
                     f"- Thống kê Quiz: Tổng {stats['total_quizzes']} bài, Điểm trung bình: {stats['average_score']}%\n"
                     f"- Các bài Quiz gần nhất:\n{recent_text}\n"
                     f"- Số thẻ Flashcard đến hạn ôn hôm nay: {len(due_cards)} thẻ."

@@ -84,3 +84,39 @@ async def test_planner_agent_run_with_memory_context(mock_llm_client, mock_memor
     assert "Nguyễn Văn A" in system_text
     assert "Giải tích" in system_text
     assert "65.0%" in system_text
+
+
+@pytest.mark.asyncio
+async def test_planner_agent_includes_ai_critique_and_goals(mock_llm_client):
+    """Kiểm tra PlannerAgent tiếp nhận mục tiêu học sinh và lời phê AI từ các bài kiểm tra trước."""
+    service = MagicMock(spec=MemoryService)
+    service.get_student_summary = AsyncMock(
+        return_value={
+            "profile": StudentProfile(
+                student_id="st_01",
+                name="Phạm Dương",
+                grade_level="Lớp 12",
+                target_goal="Đạt 9 điểm Toán",
+            ),
+            "quiz_stats": {"total_quizzes": 1, "average_score": 60.0, "total_correct": 3, "total_questions": 5},
+            "recent_quizzes": [
+                QuizRecord(
+                    student_id="st_01",
+                    topic="Tích phân",
+                    score_percentage=60.0,
+                    total_questions=5,
+                    correct_count=3,
+                    ai_critique="Cần cẩn thận khi đổi biến tích phân.",
+                )
+            ],
+        }
+    )
+    service.get_due_flashcards = AsyncMock(return_value=[])
+    planner = PlannerAgent(llm_client=mock_llm_client, memory_service=service)
+    await planner.run(messages=[{"role": "user", "content": "Lên lịch ôn tập"}], student_id="st_01")
+
+    system_text = mock_llm_client.chat_completion.call_args.kwargs["messages"][0]["content"]
+    assert "Lớp 12" in system_text
+    assert "Đạt 9 điểm Toán" in system_text
+    assert "Cần cẩn thận khi đổi biến tích phân." in system_text
+
