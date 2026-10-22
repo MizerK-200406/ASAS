@@ -1,6 +1,7 @@
 """Playground Script - Trải nghiệm trực tiếp AI Study Assistant (ASAS) với NVIDIA API."""
 
 import asyncio
+import hashlib
 import os
 import sys
 
@@ -64,12 +65,16 @@ async def main():
     student_name = input("\n👤 Nhập tên học sinh của bạn (Nhấn Enter để dùng 'Học sinh 1'): ").strip()
     if not student_name:
         student_name = "Học sinh 1"
-    student_id = "student_01"
+
+    # Tạo mã ID ổn định theo tên học sinh (Deterministic Hash ID) để hỗ trợ nhiều học sinh khác nhau
+    name_hash = hashlib.md5(student_name.lower().strip().encode("utf-8")).hexdigest()[:6]
+    student_id = f"st_{name_hash}"
+
     student_profile = await memory_service.get_or_create_student(
         student_id=student_id,
         name=student_name,
     )
-    print(f"👋 Chào mừng {student_profile.name}! Hệ thống Bộ nhớ & Spaced Repetition đã sẵn sàng.\n")
+    print(f"👋 Chào mừng {student_profile.name} (Mã ID: {student_profile.student_id})! Hệ thống Bộ nhớ & Spaced Repetition đã sẵn sàng.\n")
 
     while True:
         print("\n--- MENU TRẢI NGHIỆM ---")
