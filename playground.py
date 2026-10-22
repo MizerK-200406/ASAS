@@ -26,6 +26,7 @@ from asas.modules.tools.python_executor import PythonExecutorTool
 from asas.modules.tools.web_search import WebSearchTool
 from asas.modules.tools.registry import create_default_registry
 from asas.modules.memory.service import MemoryService
+from asas.modules.agents.orchestrator import MultiAgentOrchestrator
 
 
 async def main():
@@ -53,6 +54,13 @@ async def main():
     memory_service = MemoryService(db_path="data/asas.db")
     await memory_service.initialize()
 
+    # Khởi tạo Multi-Agent Orchestrator
+    orchestrator = MultiAgentOrchestrator(
+        llm_client=llm_client,
+        tool_registry=tool_registry,
+        memory_service=memory_service,
+    )
+
     student_name = input("\n👤 Nhập tên học sinh của bạn (Nhấn Enter để dùng 'Học sinh 1'): ").strip()
     if not student_name:
         student_name = "Học sinh 1"
@@ -70,7 +78,7 @@ async def main():
         print("3. Dùng thử công cụ Calculator (Tính toán toán học an toàn)")
         print("4. Dùng thử công cụ Safe Python Sandbox (Chạy mã Python an toàn)")
         print("5. Dùng thử công cụ Web Search (Tìm kiếm internet miễn phí qua DuckDuckGo)")
-        print("6. Chat thông minh với Trợ lý AI (Bộ nhớ hội thoại Sliding Window + Tool Calling)")
+        print("6. Chat Đa tác tử thông minh (Multi-Agent: Supervisor -> Tutor / Evaluator / Planner)")
         print("7. Xem Hồ sơ & Thống kê học tập cá nhân (SQLite Database)")
         print("8. Ôn tập Flashcards thông minh (Thuật toán Spaced Repetition SM-2)")
         print("0. Thoát")
@@ -203,22 +211,17 @@ async def main():
                 print(f"\n❌ LỖI TÌM KIẾM:\n{res.error}")
 
         elif choice == "6":
-            print("\n" + "=" * 55)
-            print("💬 CHẾ ĐỘ CHAT THÔNG MINH (BỘ NHỚ SLIDING WINDOW + TOOL CALLING)")
-            print("AI có khả năng ghi nhớ ngữ cảnh và tự động kích hoạt Tools!")
+            print("\n" + "=" * 60)
+            print("🤖 HỆ THỐNG ĐA TÁC TỬ THÔNG MINH (MULTI-AGENT ORCHESTRATION)")
+            print("1. Supervisor: Phân tích câu hỏi & tự động điều phối chuyên gia.")
+            print("2. Tutor Agent: Giảng dạy Socratic & tự động gọi Tools tính toán/code.")
+            print("3. Evaluator Agent: Chấm điểm bài giải, phản biện logic & tìm lỗi sai.")
+            print("4. Planner Agent: Phân tích điểm yếu từ Memory để lên lộ trình học tập.")
             print("Gõ 'exit' hoặc 'q' để quay lại menu chính.")
-            print("=" * 55 + "\n")
+            print("=" * 60 + "\n")
 
             session = memory_service.get_or_create_session(
-                session_id=f"chat_{student_id}",
-                system_prompt=(
-                    f"Bạn là Trợ lý Học tập AI thông minh (ASAS) đang đồng hành cùng học sinh {student_profile.name}. "
-                    "Bạn có quyền truy cập vào các công cụ: "
-                    "1. 'calculator' để tính toán biểu thức toán học. "
-                    "2. 'python_executor' để viết và chạy code Python an toàn khi cần thuật toán hoặc kiểm thử code. "
-                    "3. 'web_search' để tìm kiếm thông tin mới nhất trên Internet. "
-                    "Hãy phân tích câu hỏi của học sinh, trả lời ân cần, sư phạm và gọi công cụ phù hợp khi cần."
-                ),
+                session_id=f"multiagent_{student_id}",
                 max_messages=10,
             )
 
@@ -231,16 +234,26 @@ async def main():
                     break
 
                 session.add_message("user", prompt)
-                print("⏳ AI đang xử lý (kết hợp bộ nhớ phiên & điều phối công cụ)...")
+                print("⏳ Supervisor đang phân tích câu hỏi và điều phối tới chuyên gia phù hợp...")
                 try:
-                    response_text = await llm_client.chat_with_tools(
+                    decision, response = await orchestrator.dispatch(
                         messages=session.to_openai_messages(),
-                        tool_registry=tool_registry,
+                        student_id=student_id,
                     )
-                    print(f"\n🤖 ASAS: {response_text}")
-                    session.add_message("assistant", response_text)
+
+                    role_name = {
+                        "tutor": "GIA SƯ (TUTOR AGENT)",
+                        "evaluator": "GIÁM KHẢO (EVALUATOR AGENT)",
+                        "planner": "CỐ VẤN LỘ TRÌNH (PLANNER AGENT)",
+                    }.get(decision.next_agent.value, decision.next_agent.value.upper())
+
+                    print(f"\n🧭 [Supervisor điều phối]: -> Chuyển tới {role_name}")
+                    print(f"💡 [Lý do điều phối]: {decision.reasoning}")
+                    print(f"\n🤖 [{role_name}]:\n{response.content}")
+
+                    session.add_message("assistant", response.content)
                 except Exception as e:
-                    print(f"❌ Lỗi khi trò chuyện: {e}")
+                    print(f"❌ Lỗi khi điều phối đa tác tử: {e}")
 
         elif choice == "7":
             print("\n" + "=" * 55)
