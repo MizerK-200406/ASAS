@@ -10,8 +10,12 @@ CREATE TABLE IF NOT EXISTS students (
     student_id TEXT PRIMARY KEY,
     name TEXT NOT NULL,
     grade_level TEXT,
+    school TEXT,
     target_subjects TEXT NOT NULL DEFAULT '[]',
-    created_at TEXT NOT NULL
+    target_goal TEXT,
+    learning_style TEXT,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
 );
 
 CREATE TABLE IF NOT EXISTS quiz_records (
@@ -21,6 +25,9 @@ CREATE TABLE IF NOT EXISTS quiz_records (
     score_percentage REAL NOT NULL,
     total_questions INTEGER NOT NULL,
     correct_count INTEGER NOT NULL,
+    ai_praise TEXT,
+    ai_critique TEXT,
+    improvement_plan TEXT,
     completed_at TEXT NOT NULL,
     FOREIGN KEY (student_id) REFERENCES students(student_id) ON DELETE CASCADE
 );
@@ -38,8 +45,18 @@ CREATE TABLE IF NOT EXISTS flashcard_progress (
     FOREIGN KEY (student_id) REFERENCES students(student_id) ON DELETE CASCADE
 );
 
+CREATE TABLE IF NOT EXISTS student_activity_logs (
+    id TEXT PRIMARY KEY,
+    student_id TEXT NOT NULL,
+    action_type TEXT NOT NULL,
+    description TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    FOREIGN KEY (student_id) REFERENCES students(student_id) ON DELETE CASCADE
+);
+
 CREATE INDEX IF NOT EXISTS idx_quiz_student ON quiz_records(student_id);
 CREATE INDEX IF NOT EXISTS idx_flashcard_student_next_review ON flashcard_progress(student_id, next_review);
+CREATE INDEX IF NOT EXISTS idx_activity_student ON student_activity_logs(student_id);
 """
 
 

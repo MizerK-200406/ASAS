@@ -35,6 +35,27 @@ async def test_init_db_in_memory_creates_tables():
             assert row is not None
             assert row[0] == "flashcard_progress"
 
+        # Kiểm tra bảng mới student_activity_logs
+        async with db.execute(
+            "SELECT name FROM sqlite_master WHERE type='table' AND name='student_activity_logs'"
+        ) as cursor:
+            row = await cursor.fetchone()
+            assert row is not None
+            assert row[0] == "student_activity_logs"
+
+        # Kiểm tra các cột mở rộng của students
+        async with db.execute("PRAGMA table_info(students)") as cursor:
+            columns = [c[1] for c in await cursor.fetchall()]
+            for col in ["school", "target_goal", "learning_style", "updated_at"]:
+                assert col in columns
+
+        # Kiểm tra các cột lời phê AI của quiz_records
+        async with db.execute("PRAGMA table_info(quiz_records)") as cursor:
+            columns = [c[1] for c in await cursor.fetchall()]
+            for col in ["ai_praise", "ai_critique", "improvement_plan"]:
+                assert col in columns
+
+
 
 @pytest.mark.asyncio
 async def test_foreign_keys_and_schema_constraints():
