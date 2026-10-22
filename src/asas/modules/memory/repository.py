@@ -267,3 +267,29 @@ class MemoryRepository:
                         else None
                     ),
                 )
+
+    async def get_flashcard(self, card_id: str) -> Optional[FlashcardProgress]:
+        """Lấy thông tin chi tiết một Flashcard theo card_id."""
+        async with get_db_connection(self.db_path) as db:
+            db.row_factory = aiosqlite.Row
+            async with db.execute(
+                "SELECT * FROM flashcard_progress WHERE card_id = ?", (card_id,)
+            ) as cursor:
+                row = await cursor.fetchone()
+                if not row:
+                    return None
+                return FlashcardProgress(
+                    card_id=row["card_id"],
+                    student_id=row["student_id"],
+                    front=row["front"],
+                    back=row["back"],
+                    repetition=row["repetition"],
+                    interval_days=row["interval_days"],
+                    ease_factor=row["ease_factor"],
+                    next_review=datetime.fromisoformat(row["next_review"]),
+                    last_reviewed=(
+                        datetime.fromisoformat(row["last_reviewed"])
+                        if row["last_reviewed"]
+                        else None
+                    ),
+                )

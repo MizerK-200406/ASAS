@@ -25,6 +25,7 @@ from asas.modules.tools.calculator import CalculatorTool
 from asas.modules.tools.python_executor import PythonExecutorTool
 from asas.modules.tools.web_search import WebSearchTool
 from asas.modules.tools.registry import create_default_registry
+from asas.modules.memory.service import MemoryService
 
 
 async def main():
@@ -48,16 +49,32 @@ async def main():
     llm_client = LLMClient()
     tool_registry = create_default_registry()
 
+    # Khởi tạo Memory Service (SQLite async)
+    memory_service = MemoryService(db_path="data/asas.db")
+    await memory_service.initialize()
+
+    student_name = input("\n👤 Nhập tên học sinh của bạn (Nhấn Enter để dùng 'Học sinh 1'): ").strip()
+    if not student_name:
+        student_name = "Học sinh 1"
+    student_id = "student_01"
+    student_profile = await memory_service.get_or_create_student(
+        student_id=student_id,
+        name=student_name,
+    )
+    print(f"👋 Chào mừng {student_profile.name}! Hệ thống Bộ nhớ & Spaced Repetition đã sẵn sàng.\n")
+
     while True:
         print("\n--- MENU TRẢI NGHIỆM ---")
-        print("1. Tạo bộ câu hỏi trắc nghiệm (Quiz) & Làm bài thử")
-        print("2. Tạo bộ thẻ ghi nhớ (Flashcards)")
+        print("1. Tạo bộ câu hỏi trắc nghiệm (Quiz) & Làm bài thử (Tự động lưu điểm)")
+        print("2. Tạo bộ thẻ ghi nhớ (Flashcards) (Tự động nạp vào lịch ôn tập)")
         print("3. Dùng thử công cụ Calculator (Tính toán toán học an toàn)")
         print("4. Dùng thử công cụ Safe Python Sandbox (Chạy mã Python an toàn)")
         print("5. Dùng thử công cụ Web Search (Tìm kiếm internet miễn phí qua DuckDuckGo)")
-        print("6. Chat thông minh với Trợ lý AI (Tự động gọi Tool Calling: Math, Code, Search)")
+        print("6. Chat thông minh với Trợ lý AI (Bộ nhớ hội thoại Sliding Window + Tool Calling)")
+        print("7. Xem Hồ sơ & Thống kê học tập cá nhân (SQLite Database)")
+        print("8. Ôn tập Flashcards thông minh (Thuật toán Spaced Repetition SM-2)")
         print("0. Thoát")
-        choice = input("\nChọn chức năng (0/1/2/3/4/5/6): ").strip()
+        choice = input("\nChọn chức năng (0/1/2/3/4/5/6/7/8): ").strip()
 
         if choice == "0":
             print("Tạm biệt! Hẹn gặp lại bạn.")
@@ -95,6 +112,16 @@ async def main():
                 result = quiz_service.grade_quiz(quiz=quiz, user_answers=user_answers)
                 print(f"👉 Điểm số: {result.correct_count}/{result.total_questions} ({result.score_percentage}%)")
 
+                # Lưu kết quả vào CSDL SQLite dài hạn
+                await memory_service.record_quiz_result(
+                    student_id=student_id,
+                    topic=quiz.topic,
+                    score_percentage=result.score_percentage,
+                    total_questions=result.total_questions,
+                    correct_count=result.correct_count,
+                )
+                print("💾 [Memory] Đã tự động lưu kết quả bài thi vào hồ sơ học sinh!")
+
                 print("\nChi tiết đáp án & giải thích:")
                 for d in result.details:
                     status = "✅ ĐÚNG" if d["is_correct"] else "❌ SAI"
@@ -126,6 +153,10 @@ async def main():
                     input("👉 Nhấn Enter để xem đáp án...")
                     print(f"✅ Mặt sau: {card.back}")
                     print(f"🏷️  Tags: {', '.join(card.tags)}")
+
+                # Tự động nạp thẻ vào hệ thống ôn tập SM-2
+                await memory_service.import_flashcard_set(student_id=student_id, card_set=flashcards)
+                print(f"\n💾 [Memory] Đã lưu {len(flashcards.cards)} thẻ vào hệ thống ôn tập ngắt quãng (SM-2) của bạn!")
 
             except Exception as e:
                 print(f"❌ Lỗi khi tạo Flashcards: {e}")
@@ -173,23 +204,23 @@ async def main():
 
         elif choice == "6":
             print("\n" + "=" * 55)
-            print("💬 CHẾ ĐỘ CHAT THÔNG MINH (TOOL CALLING TỰ ĐỘNG)")
-            print("AI có thể tự động gọi Calculator, Python Sandbox, hoặc Web Search!")
+            print("💬 CHẾ ĐỘ CHAT THÔNG MINH (BỘ NHỚ SLIDING WINDOW + TOOL CALLING)")
+            print("AI có khả năng ghi nhớ ngữ cảnh và tự động kích hoạt Tools!")
             print("Gõ 'exit' hoặc 'q' để quay lại menu chính.")
             print("=" * 55 + "\n")
 
-            chat_history = [
-                {
-                    "role": "system",
-                    "content": (
-                        "Bạn là Trợ lý Học tập AI thông minh (ASAS). Bạn có quyền truy cập vào các công cụ: "
-                        "1. 'calculator' để tính toán biểu thức toán học. "
-                        "2. 'python_executor' để viết và chạy code Python an toàn khi cần thuật toán phức tạp hoặc xử lý logic. "
-                        "3. 'web_search' để tìm kiếm thông tin mới nhất trên Internet khi người dùng hỏi về kiến thức thực tế hoặc tin tức. "
-                        "Hãy chủ động phân tích câu hỏi của học sinh và gọi công cụ phù hợp để đưa ra câu trả lời chính xác nhất."
-                    ),
-                }
-            ]
+            session = memory_service.get_or_create_session(
+                session_id=f"chat_{student_id}",
+                system_prompt=(
+                    f"Bạn là Trợ lý Học tập AI thông minh (ASAS) đang đồng hành cùng học sinh {student_profile.name}. "
+                    "Bạn có quyền truy cập vào các công cụ: "
+                    "1. 'calculator' để tính toán biểu thức toán học. "
+                    "2. 'python_executor' để viết và chạy code Python an toàn khi cần thuật toán hoặc kiểm thử code. "
+                    "3. 'web_search' để tìm kiếm thông tin mới nhất trên Internet. "
+                    "Hãy phân tích câu hỏi của học sinh, trả lời ân cần, sư phạm và gọi công cụ phù hợp khi cần."
+                ),
+                max_messages=10,
+            )
 
             while True:
                 prompt = input("\n👤 Bạn: ").strip()
@@ -199,17 +230,67 @@ async def main():
                     print("Quay lại menu chính...")
                     break
 
-                chat_history.append({"role": "user", "content": prompt})
-                print("⏳ AI đang xử lý và điều phối công cụ (nếu cần)...")
+                session.add_message("user", prompt)
+                print("⏳ AI đang xử lý (kết hợp bộ nhớ phiên & điều phối công cụ)...")
                 try:
                     response_text = await llm_client.chat_with_tools(
-                        messages=chat_history,
+                        messages=session.to_openai_messages(),
                         tool_registry=tool_registry,
                     )
                     print(f"\n🤖 ASAS: {response_text}")
-                    chat_history.append({"role": "assistant", "content": response_text})
+                    session.add_message("assistant", response_text)
                 except Exception as e:
                     print(f"❌ Lỗi khi trò chuyện: {e}")
+
+        elif choice == "7":
+            print("\n" + "=" * 55)
+            print("📊 HỒ SƠ & THỐNG KÊ TIẾN ĐỘ HỌC TẬP")
+            print("=" * 55)
+            summary = await memory_service.get_student_summary(student_id)
+            profile = summary["profile"]
+            stats = summary["quiz_stats"]
+            recent = summary["recent_quizzes"]
+
+            print(f"👤 Học sinh: {profile.name} (Mã ID: {profile.student_id})")
+            print(f"📈 Tổng số bài Quiz đã làm: {stats['total_quizzes']}")
+            print(f"⭐ Điểm trung bình: {stats['average_score']}%")
+            print(f"🎯 Tổng số câu làm đúng: {stats['total_correct']}/{stats['total_questions']}")
+
+            print("\n📜 5 bài Quiz gần nhất:")
+            if not recent:
+                print("  (Chưa có bài quiz nào được ghi nhận)")
+            else:
+                for idx, q in enumerate(recent, 1):
+                    date_str = q.completed_at.strftime("%Y-%m-%d %H:%M")
+                    print(f"  {idx}. [{date_str}] Chủ đề: {q.topic} - Điểm: {q.score_percentage}% ({q.correct_count}/{q.total_questions})")
+
+        elif choice == "8":
+            print("\n" + "=" * 55)
+            print("🧠 ÔN TẬP FLASHCARDS THÔNG MINH (SUPERMEMO SM-2)")
+            print("Hệ thống tự động lọc các thẻ đã đến hạn cần ôn tập hôm nay.")
+            print("=" * 55)
+
+            due_cards = await memory_service.get_due_flashcards(student_id)
+            if not due_cards:
+                print("\n🎉 Tuyệt vời! Hiện tại bạn không có thẻ nào cần ôn tập hôm nay.")
+            else:
+                print(f"\n📚 Bạn có {len(due_cards)} thẻ cần ôn tập:\n")
+                for idx, card in enumerate(due_cards, 1):
+                    print(f"--- Thẻ {idx}/{len(due_cards)} ---")
+                    print(f"❓ Mặt trước: {card.front}")
+                    input("👉 Nhấn Enter để xem đáp án...")
+                    print(f"✅ Mặt sau: {card.back}")
+
+                    while True:
+                        q_str = input("\nĐánh giá mức độ nhớ (0: Quên sạch -> 5: Nhớ hoàn hảo): ").strip()
+                        if q_str in ("0", "1", "2", "3", "4", "5"):
+                            q_val = int(q_str)
+                            break
+                        print("Vui lòng nhập một số từ 0 đến 5!")
+
+                    updated = await memory_service.review_flashcard(card.card_id, quality=q_val)
+                    print(f"📅 SM-2 xếp lịch: Lần ôn tiếp theo sau {updated.interval_days} ngày (Ease Factor: {updated.ease_factor})\n")
+                print("🎉 Bạn đã hoàn thành phiên ôn tập Flashcard hôm nay!")
 
         else:
             print("Lựa chọn không hợp lệ, vui lòng chọn lại!")
