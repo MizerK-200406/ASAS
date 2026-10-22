@@ -78,3 +78,34 @@ async def test_flashcard_sm2_review_flow(memory_service):
     assert updated_card.repetition == 1
     assert updated_card.interval_days == 1
     assert updated_card.ease_factor > 2.5
+
+
+@pytest.mark.asyncio
+async def test_record_quiz_with_ai_feedback_and_activity_log(memory_service):
+    """Kiểm tra ghi nhận Quiz kèm nhận xét AI và tự động lưu Activity Log."""
+    await memory_service.initialize()
+    await memory_service.get_or_create_student("st_phamd", "Phạm Dương", grade_level="Lớp 12")
+
+    await memory_service.record_quiz_result(
+        student_id="st_phamd",
+        topic="Lượng giác",
+        score_percentage=80.0,
+        total_questions=5,
+        correct_count=4,
+        ai_praise="Rất tốt ở các công thức biến đổi tích thành tổng.",
+        ai_critique="Cần chú ý điều kiện của tan(x).",
+        improvement_plan="Làm thêm 2 bài tập điều kiện xác định.",
+    )
+
+    summary = await memory_service.get_student_summary("st_phamd")
+    recent = summary["recent_quizzes"][0]
+    assert recent.ai_praise == "Rất tốt ở các công thức biến đổi tích thành tổng."
+    assert recent.ai_critique == "Cần chú ý điều kiện của tan(x)."
+    assert recent.improvement_plan == "Làm thêm 2 bài tập điều kiện xác định."
+
+    # Kiểm tra activity log tự động được ghi lại
+    logs = summary.get("recent_activities", [])
+    assert len(logs) >= 1
+    assert logs[0].action_type == "QUIZ_COMPLETED"
+    assert "Lượng giác" in logs[0].description
+

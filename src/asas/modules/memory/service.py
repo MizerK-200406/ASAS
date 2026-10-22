@@ -11,6 +11,7 @@ from asas.modules.memory.schemas import (
     FlashcardProgress,
     QuizRecord,
     SM2ReviewInput,
+    StudentActivityLog,
     StudentProfile,
     utc_now,
 )
@@ -62,15 +63,25 @@ class MemoryService:
         student_id: str,
         name: str,
         grade_level: Optional[str] = None,
+        school: Optional[str] = None,
         target_subjects: Optional[List[str]] = None,
+        target_goal: Optional[str] = None,
+        learning_style: Optional[str] = None,
     ) -> StudentProfile:
         """Lấy hoặc tạo mới hồ sơ học sinh."""
         return await self.repository.get_or_create_student(
             student_id=student_id,
             name=name,
             grade_level=grade_level,
+            school=school,
             target_subjects=target_subjects,
+            target_goal=target_goal,
+            learning_style=learning_style,
         )
+
+    async def update_student_profile(self, profile: StudentProfile) -> StudentProfile:
+        """Cập nhật thông tin chi tiết hồ sơ học sinh."""
+        return await self.repository.update_student_profile(profile)
 
     async def record_quiz_result(
         self,
@@ -79,29 +90,46 @@ class MemoryService:
         score_percentage: float,
         total_questions: int,
         correct_count: int,
+        ai_praise: Optional[str] = None,
+        ai_critique: Optional[str] = None,
+        improvement_plan: Optional[str] = None,
     ) -> int:
-        """Ghi nhận kết quả làm bài trắc nghiệm của học sinh vào CSDL."""
+        """Ghi nhận kết quả làm bài trắc nghiệm của học sinh kèm nhận xét của AI vào CSDL."""
         record = QuizRecord(
             student_id=student_id,
             topic=topic,
             score_percentage=score_percentage,
             total_questions=total_questions,
             correct_count=correct_count,
+            ai_praise=ai_praise,
+            ai_critique=ai_critique,
+            improvement_plan=improvement_plan,
         )
-        return await self.repository.save_quiz_record(record)
+        row_id = await self.repository.save_quiz_record(record)
+
+        # Tự động ghi nhật ký hoạt động
+        desc = f"Làm bài kiểm tra '{topic}': {score_percentage}% ({correct_count}/{total_questions})"
+        await self.repository.log_student_activity(
+            student_id=student_id,
+            action_type="QUIZ_COMPLETED",
+            description=desc,
+        )
+        return row_id
 
     async def get_student_summary(self, student_id: str) -> Dict[str, Any]:
-        """Tổng hợp thông tin hồ sơ, thống kê điểm số và các bài kiểm tra gần nhất."""
+        """Tổng hợp thông tin hồ sơ, thống kê điểm số, bài kiểm tra và hoạt động gần nhất."""
         profile = await self.repository.get_or_create_student(
             student_id=student_id,
             name="Học sinh",
         )
         quiz_stats = await self.repository.get_quiz_statistics(student_id)
         recent_quizzes = await self.repository.get_quiz_history(student_id, limit=5)
+        recent_activities = await self.repository.get_student_activity_logs(student_id, limit=5)
         return {
             "profile": profile,
             "quiz_stats": quiz_stats,
             "recent_quizzes": recent_quizzes,
+            "recent_activities": recent_activities,
         }
 
     # -------------------------------------------------------------
@@ -127,6 +155,13 @@ class MemoryService:
             saved_cards.append(saved)
 
         logger.info(f"Đã nạp thành công {len(saved_cards)} thẻ cho học sinh {student_id}")
+
+        # Tự động ghi nhật ký hoạt động
+        await self.repository.log_student_activity(
+            student_id=student_id,
+            action_type="FLASHCARDS_IMPORTED",
+            description=f"Nạp {len(saved_cards)} thẻ ghi nhớ cho chủ đề '{card_set.topic}'",
+        )
         return saved_cards
 
     async def get_due_flashcards(
@@ -172,4 +207,40 @@ class MemoryService:
         if not updated_card:
             raise RuntimeError(f"Lỗi không thể cập nhật Flashcard: {card_id}")
 
+        # Tự động ghi nhật ký hoạt động
+        front_snippet = card.front[:25] + "..." if len(card.front) > 25 else card.front
+        await self.repository.log_student_activity(
+            student_id=card.student_id,
+            action_type="FLASHCARD_REVIEWED",
+            description=f"Ôn tập thẻ '{front_snippet}' (Đánh giá: {quality}/5)",
+        )
+
         return updated_card
+
+    # -------------------------------------------------------------
+    # 4. Quản lý Nhật ký hoạt động (Activity Logs)
+    # -------------------------------------------------------------
+
+    async def log_activity(
+        self,
+        student_id: str,
+        action_type: str,
+        description: str,
+    ) -> StudentActivityLog:
+        """Ghi lại vết hoạt động của học sinh."""
+        return await self.repository.log_student_activity(
+            student_id=student_id,
+            action_type=action_type,
+            description=description,
+        )
+
+    async def get_student_activity_logs(
+        self,
+        student_id: str,
+        limit: int = 10,
+    ) -> List[StudentActivityLog]:
+        """Lấy danh sách nhật ký hoạt động gần nhất của học sinh."""
+        return await self.repository.get_student_activity_logs(
+            student_id=student_id,
+            limit=limit,
+        )

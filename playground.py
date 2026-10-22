@@ -62,19 +62,41 @@ async def main():
         memory_service=memory_service,
     )
 
-    student_name = input("\n👤 Nhập tên học sinh của bạn (Nhấn Enter để dùng 'Học sinh 1'): ").strip()
+    student_name = input("\n👤 Nhập tên học sinh của bạn (Nhấn Enter để dùng 'Phạm Dương'): ").strip()
     if not student_name:
-        student_name = "Học sinh 1"
+        student_name = "Phạm Dương"
 
     # Tạo mã ID ổn định theo tên học sinh (Deterministic Hash ID) để hỗ trợ nhiều học sinh khác nhau
     name_hash = hashlib.md5(student_name.lower().strip().encode("utf-8")).hexdigest()[:6]
     student_id = f"st_{name_hash}"
 
-    student_profile = await memory_service.get_or_create_student(
+    # Lấy hồ sơ học sinh
+    existing = await memory_service.get_or_create_student(
         student_id=student_id,
         name=student_name,
     )
-    print(f"👋 Chào mừng {student_profile.name} (Mã ID: {student_profile.student_id})! Hệ thống Bộ nhớ & Spaced Repetition đã sẵn sàng.\n")
+
+    # Nếu là học sinh mới hoặc chưa có thông tin lớp, cho phép thiết lập hồ sơ
+    if not existing.grade_level:
+        print(f"\n📝 Thiết lập hồ sơ học tập cho {existing.name}:")
+        grade_input = input("🏫 Bạn đang học lớp mấy? (VD: Lớp 10, Lớp 12, Đại học - Enter để bỏ qua): ").strip()
+        school_input = input("🏛️  Trường học của bạn? (VD: THPT Chuyên Hà Nội - Amsterdam - Enter để bỏ qua): ").strip()
+        goal_input = input("🎯 Mục tiêu học tập? (VD: Đạt 9.0 điểm môn Toán - Enter để bỏ qua): ").strip()
+
+        if grade_input:
+            existing.grade_level = grade_input
+        if school_input:
+            existing.school = school_input
+        if goal_input:
+            existing.target_goal = goal_input
+        student_profile = await memory_service.update_student_profile(existing)
+    else:
+        student_profile = existing
+
+    grade_badge = f"[{student_profile.grade_level}]" if student_profile.grade_level else ""
+    school_badge = f"- {student_profile.school}" if student_profile.school else ""
+    print(f"👋 Chào mừng {student_profile.name} {grade_badge} {school_badge} (Mã ID: {student_profile.student_id})!")
+    print("✨ Hệ thống Hồ sơ cá nhân hóa, Bộ nhớ & Spaced Repetition đã sẵn sàng.\n")
 
     while True:
         print("\n--- MENU TRẢI NGHIỆM ---")
@@ -125,6 +147,30 @@ async def main():
                 result = quiz_service.grade_quiz(quiz=quiz, user_answers=user_answers)
                 print(f"👉 Điểm số: {result.correct_count}/{result.total_questions} ({result.score_percentage}%)")
 
+                # AI tạo lời nhận xét & định hướng cải thiện
+                print("⏳ AI đang phân tích bài giải, đưa ra lời khen ngợi và chỉ dẫn lỗi sai...")
+                mistakes = [
+                    f"Câu {d['question_index'] + 1} (Bạn chọn {d['user_answer']}, đáp án đúng là {d['correct_answer']})"
+                    for d in result.details if not d["is_correct"]
+                ]
+                feedback_prompt = (
+                    f"Học sinh {student_profile.name} vừa làm bài kiểm tra chủ đề '{quiz.topic}' đạt {result.score_percentage}% ({result.correct_count}/{result.total_questions} câu).\n"
+                    f"Các câu làm sai: {', '.join(mistakes) if mistakes else 'Không có (Làm đúng 100%)'}.\n"
+                    f"Hãy đưa ra nhận xét sư phạm ngắn gọn (tối đa 3-4 dòng):\n"
+                    f"- Lời khen ngợi động viên (1 câu)\n"
+                    f"- Nhận xét lỗi sai / Lỗ hổng kiến thức cần chú ý (1 câu)\n"
+                    f"- Hành động hoặc chủ đề cần ôn luyện tiếp theo (1 câu)"
+                )
+                try:
+                    ai_feedback = await llm_client.chat_completion(
+                        messages=[{"role": "user", "content": feedback_prompt}],
+                        temperature=0.3,
+                    )
+                except Exception:
+                    ai_feedback = f"Em đã hoàn thành bài thi với kết quả {result.score_percentage}%! Hãy tiếp tục rèn luyện nhé."
+
+                print(f"\n🤖 [LỜI PHÊ & GÓP Ý CỦA AI]:\n{ai_feedback}")
+
                 # Lưu kết quả vào CSDL SQLite dài hạn
                 await memory_service.record_quiz_result(
                     student_id=student_id,
@@ -132,8 +178,9 @@ async def main():
                     score_percentage=result.score_percentage,
                     total_questions=result.total_questions,
                     correct_count=result.correct_count,
+                    ai_critique=ai_feedback,
                 )
-                print("💾 [Memory] Đã tự động lưu kết quả bài thi vào hồ sơ học sinh!")
+                print("\n💾 [Memory] Đã tự động lưu kết quả bài thi và lời nhận xét của AI vào hồ sơ!")
 
                 print("\nChi tiết đáp án & giải thích:")
                 for d in result.details:
@@ -257,22 +304,40 @@ async def main():
                     print(f"\n🤖 [{role_name}]:\n{response.content}")
 
                     session.add_message("assistant", response.content)
+
+                    # Ghi nhật ký tương tác
+                    await memory_service.log_activity(
+                        student_id=student_id,
+                        action_type="CHAT_AGENT",
+                        description=f"Hỏi {role_name}: '{prompt[:30]}...'",
+                    )
                 except Exception as e:
                     print(f"❌ Lỗi khi điều phối đa tác tử: {e}")
 
         elif choice == "7":
-            print("\n" + "=" * 55)
-            print("📊 HỒ SƠ & THỐNG KÊ TIẾN ĐỘ HỌC TẬP")
-            print("=" * 55)
+            print("\n" + "=" * 65)
+            print("📊 HỒ SƠ HỌC TẬP & NHẬT KÝ HOẠT ĐỘNG (SQLITE DATABASE)")
+            print("=" * 65)
             summary = await memory_service.get_student_summary(student_id)
             profile = summary["profile"]
             stats = summary["quiz_stats"]
             recent = summary["recent_quizzes"]
+            activities = summary.get("recent_activities", [])
 
             print(f"👤 Học sinh: {profile.name} (Mã ID: {profile.student_id})")
-            print(f"📈 Tổng số bài Quiz đã làm: {stats['total_quizzes']}")
-            print(f"⭐ Điểm trung bình: {stats['average_score']}%")
-            print(f"🎯 Tổng số câu làm đúng: {stats['total_correct']}/{stats['total_questions']}")
+            if profile.grade_level:
+                print(f"🏫 Khối / Lớp: {profile.grade_level}")
+            if profile.school:
+                print(f"🏛️  Trường học: {profile.school}")
+            if profile.target_goal:
+                print(f"🎯 Mục tiêu: {profile.target_goal}")
+            if profile.learning_style:
+                print(f"💡 Phong cách học: {profile.learning_style}")
+
+            print("\n📈 THỐNG KÊ KẾT QUẢ HỌC TẬP:")
+            print(f"- Tổng số bài Quiz đã làm: {stats['total_quizzes']}")
+            print(f"- Điểm trung bình: {stats['average_score']}%")
+            print(f"- Tổng số câu làm đúng: {stats['total_correct']}/{stats['total_questions']}")
 
             print("\n📜 5 bài Quiz gần nhất:")
             if not recent:
@@ -281,6 +346,16 @@ async def main():
                 for idx, q in enumerate(recent, 1):
                     date_str = q.completed_at.strftime("%Y-%m-%d %H:%M")
                     print(f"  {idx}. [{date_str}] Chủ đề: {q.topic} - Điểm: {q.score_percentage}% ({q.correct_count}/{q.total_questions})")
+                    if q.ai_critique:
+                        print(f"     💬 Lời phê AI: {q.ai_critique.strip()[:120]}...")
+
+            print("\n🕒 5 Hoạt động gần nhất:")
+            if not activities:
+                print("  (Chưa có hoạt động nào được ghi nhận)")
+            else:
+                for idx, act in enumerate(activities, 1):
+                    act_date = act.created_at.strftime("%Y-%m-%d %H:%M")
+                    print(f"  {idx}. [{act_date}] [{act.action_type}] {act.description}")
 
         elif choice == "8":
             print("\n" + "=" * 55)
