@@ -128,3 +128,77 @@ async def test_flashcard_progress_and_due_cards(repo):
     # Sau khi cập nhật, card_1 không còn nằm trong danh sách đến hạn tại thời điểm `now`
     due_cards_after = await repo.get_due_flashcards("student_01", current_time=now)
     assert len(due_cards_after) == 0
+
+
+@pytest.mark.asyncio
+async def test_get_or_create_student_with_extended_fields(repo):
+    """Kiểm tra lưu và lấy học sinh với trường mở rộng (school, target_goal, learning_style)."""
+    await repo.initialize()
+    created = await repo.get_or_create_student(
+        student_id="st_phamd",
+        name="Phạm Dương",
+        grade_level="Lớp 12",
+        school="THPT Chu Văn An",
+        target_goal="Điểm 9.0 môn Toán",
+        learning_style="Visual & Socratic",
+    )
+    assert created.school == "THPT Chu Văn An"
+    assert created.target_goal == "Điểm 9.0 môn Toán"
+    assert created.learning_style == "Visual & Socratic"
+
+    # Lấy lại học sinh
+    retrieved = await repo.get_or_create_student("st_phamd", "Phạm Dương")
+    assert retrieved.school == "THPT Chu Văn An"
+    assert retrieved.target_goal == "Điểm 9.0 môn Toán"
+    assert retrieved.learning_style == "Visual & Socratic"
+
+
+@pytest.mark.asyncio
+async def test_quiz_record_ai_critique_persistence(repo):
+    """Kiểm tra lưu và đọc lại các cột lời phê, góp ý cải thiện của AI."""
+    await repo.initialize()
+    await repo.get_or_create_student("st_01", "Học sinh 1")
+
+    q = QuizRecord(
+        student_id="st_01",
+        topic="Hình học không gian",
+        score_percentage=75.0,
+        total_questions=4,
+        correct_count=3,
+        ai_praise="Em tưởng tượng hình khối rất chuẩn.",
+        ai_critique="Cần cẩn thận khi tính khoảng cách từ điểm đến mặt phẳng.",
+        improvement_plan="Luyện thêm 2 bài tính khoảng cách dạng chân đường cao.",
+    )
+    await repo.save_quiz_record(q)
+
+    history = await repo.get_quiz_history("st_01")
+    assert len(history) == 1
+    item = history[0]
+    assert item.ai_praise == "Em tưởng tượng hình khối rất chuẩn."
+    assert item.ai_critique == "Cần cẩn thận khi tính khoảng cách từ điểm đến mặt phẳng."
+    assert item.improvement_plan == "Luyện thêm 2 bài tính khoảng cách dạng chân đường cao."
+
+
+@pytest.mark.asyncio
+async def test_student_activity_logging(repo):
+    """Kiểm tra ghi nhật ký hành động và truy xuất lịch sử hoạt động của học sinh."""
+    await repo.initialize()
+    await repo.get_or_create_student("st_01", "Học sinh 1")
+
+    await repo.log_student_activity(
+        student_id="st_01",
+        action_type="QUIZ_COMPLETED",
+        description="Hoàn thành bài Quiz Hình học không gian đạt 75.0%",
+    )
+    await repo.log_student_activity(
+        student_id="st_01",
+        action_type="FLASHCARD_REVIEWED",
+        description="Ôn tập 5 thẻ ghi nhớ chủ đề Toán",
+    )
+
+    logs = await repo.get_student_activity_logs("st_01", limit=10)
+    assert len(logs) == 2
+    assert logs[0].action_type == "FLASHCARD_REVIEWED"  # Mới nhất xếp trước
+    assert logs[1].action_type == "QUIZ_COMPLETED"
+    assert logs[0].student_id == "st_01"
+
