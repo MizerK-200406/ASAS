@@ -75,6 +75,7 @@ class LLMClient:
         messages: List[Dict[str, str]],
         response_model: Type[T],
         model: Optional[str] = None,
+        system_prompt: Optional[str] = None,
         temperature: float = 0.2,
         max_tokens: int = 4096,
     ) -> T:
@@ -89,8 +90,16 @@ class LLMClient:
         )
 
         formatted_messages = list(messages)
-        # Bổ sung hướng dẫn vào tin nhắn đầu tiên (system hoặc user)
-        if formatted_messages and formatted_messages[0]["role"] == "system":
+        # Bổ sung hướng dẫn vào tin nhắn system đầu tiên
+        if system_prompt:
+            formatted_messages.insert(
+                0,
+                {
+                    "role": "system",
+                    "content": system_prompt + schema_instruction,
+                },
+            )
+        elif formatted_messages and formatted_messages[0]["role"] == "system":
             formatted_messages[0] = {
                 "role": "system",
                 "content": formatted_messages[0]["content"] + schema_instruction,
