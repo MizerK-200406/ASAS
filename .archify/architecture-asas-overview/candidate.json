@@ -1,0 +1,257 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": {
+    "title": "Kiến trúc Tổng thể Hệ thống ASAS",
+    "subtitle": "Adaptive Student Assessment System - Nền tảng Đánh giá & Hỗ trợ Học tập Cá nhân hóa",
+    "output": "docs/diagrams/asas_architecture.html",
+    "quality_profile": "standard",
+    "visual_preset": "classic",
+    "viewBox": [1200, 760],
+    "repository": {
+      "url": "https://github.com/MizerK-200406/ASAS.git",
+      "provider": "github",
+      "revision": "10a4380d82c7fceb0a9d7f6e9200da3c4b8eb471"
+    }
+  },
+  "components": [
+    {
+      "id": "student",
+      "type": "external",
+      "label": "Học sinh (Người học)",
+      "sublabel": "Giao diện người dùng cuối",
+      "pos": [40, 310],
+      "size": [150, 60],
+      "icon": "person"
+    },
+    {
+      "id": "playground",
+      "type": "frontend",
+      "label": "Playground CLI",
+      "sublabel": "Giao diện dòng lệnh",
+      "pos": [240, 230],
+      "size": [160, 60],
+      "tag": "Python 3.12",
+      "sources": [
+        { "path": "playground.py", "line": 1, "end_line": 50, "label": "CLI Entry" }
+      ]
+    },
+    {
+      "id": "fastapi",
+      "type": "backend",
+      "label": "FastAPI Web Server",
+      "sublabel": "Cổng REST API",
+      "pos": [240, 390],
+      "size": [160, 60],
+      "tag": "Roadmap v1"
+    },
+    {
+      "id": "supervisor",
+      "type": "backend",
+      "label": "Supervisor Agent",
+      "sublabel": "Trợ lý điều phối trung tâm",
+      "pos": [470, 310],
+      "size": [170, 65],
+      "tag": "Single Facade",
+      "sources": [
+        { "path": "src/asas/modules/agents/supervisor.py", "line": 1, "end_line": 60, "label": "Supervisor Router" }
+      ]
+    },
+    {
+      "id": "tutor",
+      "type": "backend",
+      "label": "Tutor Agent",
+      "sublabel": "Gia sư AI giải thích",
+      "pos": [710, 130],
+      "size": [160, 55],
+      "sources": [
+        { "path": "src/asas/modules/agents/tutor.py", "line": 1, "end_line": 50, "label": "Tutor Logic" }
+      ]
+    },
+    {
+      "id": "evaluator",
+      "type": "backend",
+      "label": "Evaluator Agent",
+      "sublabel": "Chấm điểm & Phản biện",
+      "pos": [710, 220],
+      "size": [160, 55],
+      "sources": [
+        { "path": "src/asas/modules/agents/evaluator.py", "line": 1, "end_line": 50, "label": "Evaluator Logic" }
+      ]
+    },
+    {
+      "id": "planner",
+      "type": "backend",
+      "label": "Planner Agent",
+      "sublabel": "Lập kế hoạch lộ trình",
+      "pos": [710, 310],
+      "size": [160, 55],
+      "sources": [
+        { "path": "src/asas/modules/agents/planner.py", "line": 1, "end_line": 50, "label": "Planner Logic" }
+      ]
+    },
+    {
+      "id": "quiz_service",
+      "type": "backend",
+      "label": "Quiz Service",
+      "sublabel": "Sinh đề & Chấm trắc nghiệm",
+      "pos": [710, 410],
+      "size": [160, 55],
+      "sources": [
+        { "path": "src/asas/modules/quiz/service.py", "line": 1, "end_line": 50, "label": "Quiz Engine" }
+      ]
+    },
+    {
+      "id": "flashcard_service",
+      "type": "backend",
+      "label": "Flashcard Service",
+      "sublabel": "Thẻ nhớ & Thuật toán SM-2",
+      "pos": [710, 500],
+      "size": [160, 55],
+      "sources": [
+        { "path": "src/asas/modules/flashcard/service.py", "line": 1, "end_line": 50, "label": "SM-2 Engine" }
+      ]
+    },
+    {
+      "id": "sandbox",
+      "type": "security",
+      "label": "Safe Python Sandbox",
+      "sublabel": "Thực thi code an toàn cô lập",
+      "pos": [950, 130],
+      "size": [180, 55],
+      "tag": "Headless Tool",
+      "sources": [
+        { "path": "src/asas/modules/tools/python_executor.py", "line": 1, "end_line": 50, "label": "Sandbox Engine" }
+      ]
+    },
+    {
+      "id": "search_guardrails",
+      "type": "security",
+      "label": "Web Search Guardrails",
+      "sublabel": "DuckDuckGo có rào chắn",
+      "pos": [950, 220],
+      "size": [180, 55],
+      "tag": "Fact Checking Only",
+      "sources": [
+        { "path": "src/asas/modules/tools/web_search.py", "line": 1, "end_line": 50, "label": "Search Guardrails" }
+      ]
+    },
+    {
+      "id": "nim_cloud",
+      "type": "cloud",
+      "label": "NVIDIA NIM Cloud",
+      "sublabel": "Mô hình LLM DeepSeek/Llama",
+      "pos": [950, 330],
+      "size": [180, 65],
+      "tag": "OpenAI Compatible",
+      "sources": [
+        { "path": "src/asas/core/llm_client.py", "line": 1, "end_line": 50, "label": "NIM Client" }
+      ]
+    },
+    {
+      "id": "memory_service",
+      "type": "backend",
+      "label": "Memory Service",
+      "sublabel": "Tầng truy cập dữ liệu (DAL)",
+      "pos": [470, 530],
+      "size": [170, 60],
+      "tag": "Repository Pattern",
+      "sources": [
+        { "path": "src/asas/modules/memory/service.py", "line": 1, "end_line": 50, "label": "Memory Service" }
+      ]
+    },
+    {
+      "id": "users_db",
+      "type": "database",
+      "label": "CSDL Người dùng",
+      "sublabel": "Hồ sơ, Điểm thi & SM-2",
+      "pos": [240, 510],
+      "size": [160, 60],
+      "tag": "data/users.db",
+      "sources": [
+        { "path": "src/asas/modules/memory/db.py", "line": 1, "end_line": 50, "label": "User Schema" }
+      ]
+    },
+    {
+      "id": "chats_db",
+      "type": "database",
+      "label": "CSDL Hội thoại",
+      "sublabel": "Phiên trò chuyện & Tin nhắn",
+      "pos": [240, 600],
+      "size": [160, 60],
+      "tag": "data/chats.db",
+      "sources": [
+        { "path": "src/asas/modules/memory/db.py", "line": 51, "end_line": 100, "label": "Chat Schema" }
+      ]
+    }
+  ],
+  "boundaries": [
+    {
+      "kind": "region",
+      "label": "Khu vực Tác tử & Dịch vụ Cốt lõi (ASAS Core Engine)",
+      "wraps": ["supervisor", "tutor", "evaluator", "planner", "quiz_service", "flashcard_service"]
+    },
+    {
+      "kind": "security-group",
+      "label": "Rào chắn An toàn & Nguồn Tri thức Ngoài",
+      "wraps": ["sandbox", "search_guardrails", "nim_cloud"]
+    },
+    {
+      "kind": "region",
+      "label": "Tầng Dữ liệu Phân rã Kép (Dual Database Persistence)",
+      "wraps": ["users_db", "chats_db", "memory_service"]
+    }
+  ],
+  "connections": [
+    { "from": "student", "to": "playground", "label": "Nhập liệu CLI" },
+    { "from": "student", "to": "fastapi", "label": "HTTP Request" },
+    { "from": "playground", "to": "supervisor", "label": "Yêu cầu Trợ lý AI", "variant": "emphasis" },
+    { "from": "playground", "to": "quiz_service", "fromSide": "bottom", "toSide": "left", "label": "Tạo & Làm Quiz" },
+    { "from": "playground", "to": "flashcard_service", "fromSide": "bottom", "toSide": "left", "label": "Học Flashcard SM-2" },
+    { "from": "fastapi", "to": "supervisor", "fromSide": "right", "toSide": "left", "label": "API Chat", "labelDy": 12 },
+    { "from": "supervisor", "to": "tutor", "fromSide": "right", "toSide": "left", "label": "Gia sư", "variant": "emphasis" },
+    { "from": "supervisor", "to": "evaluator", "fromSide": "right", "toSide": "left", "label": "Chấm điểm", "variant": "emphasis" },
+    { "from": "supervisor", "to": "planner", "fromSide": "right", "toSide": "left", "label": "Lộ trình", "variant": "emphasis" },
+    { "from": "tutor", "to": "sandbox", "fromSide": "right", "toSide": "left", "label": "Chạy code", "variant": "security" },
+    { "from": "tutor", "to": "search_guardrails", "fromSide": "right", "toSide": "left", "label": "Tra cứu", "variant": "security" },
+    { "from": "evaluator", "to": "search_guardrails", "fromSide": "right", "toSide": "left", "label": "Xác minh", "variant": "security" },
+    { "from": "supervisor", "to": "nim_cloud", "fromSide": "right", "toSide": "left", "variant": "dashed" },
+    { "from": "quiz_service", "to": "nim_cloud", "fromSide": "right", "toSide": "left", "variant": "dashed" },
+    { "from": "flashcard_service", "to": "nim_cloud", "fromSide": "right", "toSide": "left", "variant": "dashed" },
+    { "from": "supervisor", "to": "memory_service", "fromSide": "bottom", "toSide": "top", "label": "Lưu hội thoại", "labelDy": 24 },
+    { "from": "quiz_service", "to": "memory_service", "fromSide": "left", "toSide": "right", "label": "Lưu điểm" },
+    { "from": "flashcard_service", "to": "memory_service", "fromSide": "left", "toSide": "right", "label": "Lưu thẻ" },
+    { "from": "memory_service", "to": "users_db", "fromSide": "left", "toSide": "right", "label": "users.db", "variant": "emphasis" },
+    { "from": "memory_service", "to": "chats_db", "fromSide": "left", "toSide": "right", "label": "chats.db", "variant": "emphasis" }
+  ],
+  "cards": [
+    {
+      "dot": "rose",
+      "title": "Bảo mật & Rào chắn (Security Guardrails)",
+      "items": [
+        "Python Sandbox chạy headless cô lập, ngăn chặn thực thi mã độc",
+        "Web Search có rào chắn chỉ dùng kiểm chứng tri thức khi đánh giá",
+        "Tuyệt đối không cho phép học sinh dùng tác tử làm proxy tìm kiếm ngoài"
+      ]
+    },
+    {
+      "dot": "emerald",
+      "title": "Kiến trúc Đa tác tử (Multi-Agent Architecture)",
+      "items": [
+        "Supervisor làm Facade duy nhất tiếp nhận câu hỏi và định tuyến ngầm",
+        "Tutor giải thích chi tiết, gợi ý hướng giải quyết có kiểm chứng",
+        "Evaluator chấm điểm khách quan, chỉ ra lỗ hổng tư duy của học sinh",
+        "Planner xây dựng lộ trình học tập bám sát hồ sơ năng lực"
+      ]
+    },
+    {
+      "dot": "violet",
+      "title": "Cơ sở Dữ liệu Phân rã Kép (Dual Database)",
+      "items": [
+        "data/users.db: Lưu học sinh, hồ sơ năng lực, điểm thi và tiến độ SM-2",
+        "data/chats.db: Lưu phiên trò chuyện và tin nhắn tần suất cao",
+        "Tối ưu hóa hiệu năng truy vấn I/O và đảm bảo cô lập dữ liệu người dùng"
+      ]
+    }
+  ]
+}
