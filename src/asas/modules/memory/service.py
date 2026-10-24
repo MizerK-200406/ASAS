@@ -83,6 +83,15 @@ class MemoryService:
         """Cập nhật thông tin chi tiết hồ sơ học sinh."""
         return await self.repository.update_student_profile(profile)
 
+    async def get_all_students(self) -> List[StudentProfile]:
+        """Lấy danh sách tất cả học sinh đã đăng ký trong hệ thống."""
+        return await self.repository.get_all_students()
+
+    async def get_quiz_record_by_id(self, quiz_id: int) -> Optional[QuizRecord]:
+        """Lấy chi tiết một bài quiz theo ID (Master-Detail pattern)."""
+        return await self.repository.get_quiz_record_by_id(quiz_id)
+
+
     async def record_quiz_result(
         self,
         student_id: str,

@@ -45,6 +45,7 @@ class StudentProfile(BaseModel):
 class QuizRecord(BaseModel):
     """Bản ghi kết quả bài trắc nghiệm của học sinh kèm nhận xét của AI."""
 
+    id: Optional[int] = None
     student_id: str
     topic: str
     score_percentage: float
@@ -54,6 +55,7 @@ class QuizRecord(BaseModel):
     ai_critique: Optional[str] = None
     improvement_plan: Optional[str] = None
     completed_at: datetime = Field(default_factory=utc_now)
+
 
 
 class StudentActivityLog(BaseModel):

@@ -202,3 +202,48 @@ async def test_student_activity_logging(repo):
     assert logs[1].action_type == "QUIZ_COMPLETED"
     assert logs[0].student_id == "st_01"
 
+
+@pytest.mark.asyncio
+async def test_get_all_students(repo):
+    """Kiểm tra liệt kê tất cả các hồ sơ học sinh trong CSDL."""
+    await repo.initialize()
+    await repo.get_or_create_student("st_01", "Nguyễn Duy Long", grade_level="Lớp 10")
+    await repo.get_or_create_student("st_02", "Nguyễn Duy Long", grade_level="Lớp 12")
+
+    students = await repo.get_all_students()
+    assert len(students) >= 2
+    ids = [s.student_id for s in students]
+    assert "st_01" in ids
+    assert "st_02" in ids
+
+
+@pytest.mark.asyncio
+async def test_get_quiz_record_by_id_drilldown(repo):
+    """Kiểm tra lấy chi tiết một bài quiz theo ID (Master-Detail pattern)."""
+    await repo.initialize()
+    await repo.get_or_create_student("st_01", "Học sinh A")
+
+    q = QuizRecord(
+        student_id="st_01",
+        topic="Java OOP",
+        score_percentage=100.0,
+        total_questions=3,
+        correct_count=3,
+        ai_praise="Em hiểu rất rõ về tính kế thừa và đa hình.",
+        ai_critique="Không có lỗi sai.",
+        improvement_plan="Tiến tới làm bài tập về Interface và Abstract Class.",
+    )
+    quiz_id = await repo.save_quiz_record(q)
+    assert quiz_id > 0
+
+    record = await repo.get_quiz_record_by_id(quiz_id)
+    assert record is not None
+    assert record.id == quiz_id
+    assert record.topic == "Java OOP"
+    assert record.ai_praise == "Em hiểu rất rõ về tính kế thừa và đa hình."
+
+    # Lấy ID không tồn tại
+    non_existent = await repo.get_quiz_record_by_id(999999)
+    assert non_existent is None
+
+

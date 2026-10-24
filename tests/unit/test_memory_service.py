@@ -109,3 +109,29 @@ async def test_record_quiz_with_ai_feedback_and_activity_log(memory_service):
     assert logs[0].action_type == "QUIZ_COMPLETED"
     assert "Lượng giác" in logs[0].description
 
+
+@pytest.mark.asyncio
+async def test_get_all_students_and_quiz_detail(memory_service):
+    """Kiểm tra MemoryService cung cấp danh sách học sinh và chi tiết bài quiz."""
+    await memory_service.initialize()
+    await memory_service.get_or_create_student("st_user1", "Nguyễn Duy Long", grade_level="Lớp 10")
+    await memory_service.get_or_create_student("st_user2", "Nguyễn Duy Long", grade_level="Lớp 12")
+
+    students = await memory_service.get_all_students()
+    assert len(students) >= 2
+
+    quiz_id = await memory_service.record_quiz_result(
+        student_id="st_user1",
+        topic="Cơ bản",
+        score_percentage=100.0,
+        total_questions=2,
+        correct_count=2,
+        ai_praise="Rất tốt!",
+    )
+
+    detail = await memory_service.get_quiz_record_by_id(quiz_id)
+    assert detail is not None
+    assert detail.id == quiz_id
+    assert detail.ai_praise == "Rất tốt!"
+
+

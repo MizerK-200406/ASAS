@@ -117,6 +117,36 @@ class MemoryRepository:
             await db.commit()
             return profile
 
+    async def get_all_students(self) -> List[StudentProfile]:
+        """Liệt kê toàn bộ danh sách học sinh hiện có trong cơ sở dữ liệu."""
+        async with get_db_connection(self.db_path) as db:
+            db.row_factory = aiosqlite.Row
+            async with db.execute(
+                "SELECT * FROM students ORDER BY updated_at DESC, created_at DESC"
+            ) as cursor:
+                rows = await cursor.fetchall()
+                students: List[StudentProfile] = []
+                for row in rows:
+                    col_names = row.keys()
+                    students.append(
+                        StudentProfile(
+                            student_id=row["student_id"],
+                            name=row["name"],
+                            grade_level=row["grade_level"],
+                            school=row["school"] if "school" in col_names else None,
+                            target_subjects=json.loads(row["target_subjects"]),
+                            target_goal=row["target_goal"] if "target_goal" in col_names else None,
+                            learning_style=row["learning_style"] if "learning_style" in col_names else None,
+                            created_at=datetime.fromisoformat(row["created_at"]),
+                            updated_at=(
+                                datetime.fromisoformat(row["updated_at"])
+                                if "updated_at" in col_names and row["updated_at"]
+                                else datetime.fromisoformat(row["created_at"])
+                            ),
+                        )
+                    )
+                return students
+
     # -------------------------------------------------------------
     # 2. Quiz Records & Statistics
     # -------------------------------------------------------------
@@ -158,6 +188,7 @@ class MemoryRepository:
                 col_names = rows[0].keys() if rows else []
                 return [
                     QuizRecord(
+                        id=row["id"],
                         student_id=row["student_id"],
                         topic=row["topic"],
                         score_percentage=row["score_percentage"],
@@ -170,6 +201,30 @@ class MemoryRepository:
                     )
                     for row in rows
                 ]
+
+    async def get_quiz_record_by_id(self, quiz_id: int) -> Optional[QuizRecord]:
+        """Truy xuất chi tiết một bài quiz theo ID (Master-Detail drilldown)."""
+        async with get_db_connection(self.db_path) as db:
+            db.row_factory = aiosqlite.Row
+            async with db.execute(
+                "SELECT * FROM quiz_records WHERE id = ?", (quiz_id,)
+            ) as cursor:
+                row = await cursor.fetchone()
+                if not row:
+                    return None
+                col_names = row.keys()
+                return QuizRecord(
+                    id=row["id"],
+                    student_id=row["student_id"],
+                    topic=row["topic"],
+                    score_percentage=row["score_percentage"],
+                    total_questions=row["total_questions"],
+                    correct_count=row["correct_count"],
+                    ai_praise=row["ai_praise"] if "ai_praise" in col_names else None,
+                    ai_critique=row["ai_critique"] if "ai_critique" in col_names else None,
+                    improvement_plan=row["improvement_plan"] if "improvement_plan" in col_names else None,
+                    completed_at=datetime.fromisoformat(row["completed_at"]),
+                )
 
     async def get_quiz_statistics(self, student_id: str) -> Dict[str, Any]:
         """Tính toán thống kê điểm số tổng quan của học sinh."""
