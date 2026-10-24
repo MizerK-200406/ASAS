@@ -73,3 +73,26 @@ def test_web_search_args_validation(search_tool):
     # Không hợp lệ: max_results vượt quá giới hạn le=10
     with pytest.raises(ValidationError):
         search_tool.parse_and_validate_args({"query": "AI", "max_results": 25})
+
+
+@pytest.mark.asyncio
+async def test_web_search_truncates_long_snippets_by_budget(search_tool):
+    """Kiểm tra kết quả web search tự động được cắt tỉa theo ngân sách token."""
+    from asas.core.token_manager import estimate_tokens
+
+    # Giả lập kết quả tìm kiếm với nội dung cực kỳ dài (hơn 1000 từ)
+    huge_body = " ".join(["Nội_dung_rất_dài_của_trang_web" for _ in range(500)])
+    mock_results = [
+        {"title": "Trang web dài 1", "href": "https://example.com/1", "body": huge_body},
+        {"title": "Trang web dài 2", "href": "https://example.com/2", "body": huge_body},
+    ]
+
+    with patch.object(search_tool, "_raw_search", return_value=mock_results):
+        res = await search_tool.execute(query="Test token limit", max_results=2)
+
+        assert res.success is True
+        # Đảm bảo nội dung bị cắt tỉa
+        assert "..." in res.output
+        # Đảm bảo tổng số token của output không bị phình to (ví dụ <= 600 tokens)
+        assert estimate_tokens(res.output) <= 600
+

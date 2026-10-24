@@ -9,6 +9,7 @@ try:
 except ImportError:
     from duckduckgo_search import DDGS
 
+from asas.core.token_manager import truncate_text_by_tokens
 from asas.modules.tools.base import BaseTool, ToolResult
 
 
@@ -28,6 +29,9 @@ class WebSearchTool(BaseTool):
         "hoặc tra cứu các thông tin thực tế ngoài đời thực."
     )
     args_schema: Type[BaseModel] = WebSearchArgs
+    max_snippet_tokens: int = 150
+    total_budget_tokens: int = 600
+
 
     def _raw_search(self, query: str, max_results: int) -> List[Dict[str, str]]:
         """Hàm đồng bộ gọi DuckDuckGo Search API."""
@@ -54,12 +58,15 @@ class WebSearchTool(BaseTool):
                     output=f"Không tìm thấy kết quả nào phù hợp với từ khóa: '{search_query}'.",
                 )
 
-            # Format kết quả dạng danh sách dễ đọc cho mô hình AI
+            # Format kết quả dạng danh sách dễ đọc cho mô hình AI với giới hạn token an toàn
             formatted_items = []
             for idx, item in enumerate(results, start=1):
                 title = item.get("title", "Không có tiêu đề")
                 href = item.get("href", "")
-                body = item.get("body", "")
+                raw_body = item.get("body", "")
+                # Cắt gọn nội dung snippet không vượt quá max_snippet_tokens
+                body = truncate_text_by_tokens(raw_body, max_tokens=self.max_snippet_tokens)
+
                 formatted_items.append(
                     f"[{idx}] Tiêu đề: {title}\n"
                     f"    Đường dẫn: {href}\n"
@@ -67,7 +74,10 @@ class WebSearchTool(BaseTool):
                 )
 
             final_output = "\n\n".join(formatted_items)
-            logger.info(f"Tìm kiếm thành công, trả về {len(results)} kết quả.")
+            # Cắt gọn tổng output nếu vượt quá ngân sách token tối đa cho Web Search
+            final_output = truncate_text_by_tokens(final_output, max_tokens=self.total_budget_tokens)
+
+            logger.info(f"Tìm kiếm thành công, trả về {len(results)} kết quả (đã tối ưu hóa token).")
             return ToolResult(success=True, output=final_output)
 
         except Exception as e:
