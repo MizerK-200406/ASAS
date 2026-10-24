@@ -274,7 +274,7 @@ async def test_chat_session_and_messages_persistence(repo):
     msg2 = await repo.save_chat_message(
         session_id="sess_math_01",
         role="assistant",
-        content="Công thức là: \int u dv = uv - \int v du.",
+        content=r"Công thức là: \int u dv = uv - \int v du.",
         agent_role="tutor",
     )
     assert msg2.agent_role == "tutor"

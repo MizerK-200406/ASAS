@@ -8,7 +8,7 @@ import pytest
 
 def test_archify_skill_structure_and_frontmatter():
     """Kiểm tra tệp SKILL.md của archify tồn tại và có frontmatter chuẩn Antigravity."""
-    repo_root = Path(__file__).resolve().parents[2]
+    repo_root = Path(__file__).resolve().parents[3]
     skill_dir = repo_root / ".agents" / "skills" / "archify"
     skill_md = skill_dir / "SKILL.md"
 
