@@ -29,7 +29,7 @@ class MultiAgentOrchestrator:
         # Lắp ráp 4 tác tử chuyên biệt
         self.supervisor = SupervisorAgent(llm_client=self.llm_client)
         self.tutor = TutorAgent(llm_client=self.llm_client, tool_registry=self.tool_registry)
-        self.evaluator = EvaluatorAgent(llm_client=self.llm_client)
+        self.evaluator = EvaluatorAgent(llm_client=self.llm_client, tool_registry=self.tool_registry)
         self.planner = PlannerAgent(llm_client=self.llm_client, memory_service=self.memory_service)
 
     async def dispatch(

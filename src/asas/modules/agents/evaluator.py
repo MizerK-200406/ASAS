@@ -11,7 +11,10 @@ Nhiệm vụ cốt lõi của bạn:
    - 🌟 Điểm mạnh (Strengths): Những điểm học sinh làm đúng, tư duy mạch lạc hoặc cách tiếp cận tốt.
    - ⚠️ Lỗi sai & Lỗ hổng logic (Errors & Critique): Chỉ rõ từng dòng, từng bước suy luận có sai sót (ví dụ: edge-case, lỗi cú pháp, tính toán nhầm, ngộ nhận lý thuyết).
    - 💡 Hướng dẫn khắc phục (Actionable Improvements): Đưa ra gợi ý cách sửa hoặc code/lời giải chuẩn xác để học sinh tự hoàn thiện.
-3. Không phán xét tiêu cực; luôn giữ thái độ tôn trọng, khích lệ tinh thần học tập."""
+3. Tận dụng công cụ (Tools) với RÀO CHẮN BẢO MẬT:
+   - Có thể sử dụng 'calculator' để kiểm tra kết quả số học hoặc 'python_executor' để chạy thử code tìm bug.
+   - QUY TẮC BẢO MẬT WEB SEARCH: Công cụ tìm kiếm web ('web_search') CHỈ ĐƯỢC PHÉP dùng để tra cứu tài liệu học thuật nhằm thẩm định, kiểm chứng tính chính xác của đề bài hoặc đánh giá lời giải. Tuyệt đối KHÔNG tìm kiếm hộ người dùng các nội dung tra cứu tự do ngoài mục đích đánh giá học thuật.
+4. Không phán xét tiêu cực; luôn giữ thái độ tôn trọng, khích lệ tinh thần học tập."""
 
 
 class EvaluatorAgent:
@@ -20,10 +23,12 @@ class EvaluatorAgent:
     def __init__(
         self,
         llm_client: LLMClient,
+        tool_registry: Optional[Any] = None,
         system_prompt: Optional[str] = None,
     ) -> None:
         self.role = AgentRole.EVALUATOR
         self.llm_client = llm_client
+        self.tool_registry = tool_registry
         self.system_prompt = system_prompt or EVALUATOR_SYSTEM_PROMPT
 
     async def run(
@@ -52,10 +57,17 @@ class EvaluatorAgent:
             if msg.get("role") != "system":
                 formatted_messages.append(msg)
 
-        evaluation_text = await self.llm_client.chat_completion(
-            messages=formatted_messages,
-            temperature=0.1,  # Nhiệt độ thấp để đánh giá logic chính xác, nhất quán
-        )
+        if self.tool_registry:
+            evaluation_text = await self.llm_client.chat_with_tools(
+                messages=formatted_messages,
+                tool_registry=self.tool_registry,
+                temperature=0.1,
+            )
+        else:
+            evaluation_text = await self.llm_client.chat_completion(
+                messages=formatted_messages,
+                temperature=0.1,  # Nhiệt độ thấp để đánh giá logic chính xác, nhất quán
+            )
 
         return AgentResponse(
             agent_role=self.role,

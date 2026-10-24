@@ -25,7 +25,9 @@ Nhiệm vụ của bạn là đọc tin nhắn mới nhất và bối cảnh h�
 Yêu cầu xuất ra cấu trúc JSON chuẩn:
 - next_agent: tutor | evaluator | planner
 - reasoning: Lý giải ngắn gọn tại sao chọn agent này
-- instructions: Chỉ dẫn nghiệp vụ cụ thể cho agent tiếp nhận (hoặc null nếu không có)."""
+- instructions: Chỉ dẫn nghiệp vụ cụ thể cho agent tiếp nhận (hoặc null nếu không có).
+
+LƯU Ý QUAN TRỌNG: Hệ thống ASAS KHÔNG hỗ trợ tìm kiếm web hộ người dùng cho các nhu cầu tra cứu tự do ngoài mục đích học tập. Nếu học sinh yêu cầu tra cứu ngoài lề, hãy điều hướng tới 'tutor' để nhắc nhở học sinh tập trung vào bài học."""
 
 
 class SupervisorAgent:
