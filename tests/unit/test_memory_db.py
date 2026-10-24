@@ -88,3 +88,32 @@ async def test_foreign_keys_and_schema_constraints():
                    VALUES ('non_existent_student', 'Math', 100.0, 5, 5, '2026-10-22T00:00:00Z')"""
             )
             await db.commit()
+
+
+@pytest.mark.asyncio
+async def test_init_user_db_and_chat_db_independently():
+    """Kiểm tra khởi tạo riêng biệt 2 database: user_db và chat_db."""
+    from asas.modules.memory.db import init_user_db, init_chat_db
+
+    # Test user db
+    async with aiosqlite.connect(":memory:") as u_db:
+        await init_user_db(u_db)
+        async with u_db.execute("SELECT name FROM sqlite_master WHERE type='table'") as cursor:
+            tables = [r[0] for r in await cursor.fetchall()]
+            assert "students" in tables
+            assert "quiz_records" in tables
+            assert "flashcard_progress" in tables
+            assert "student_activity_logs" in tables
+            assert "chat_sessions" not in tables
+            assert "chat_messages" not in tables
+
+    # Test chat db
+    async with aiosqlite.connect(":memory:") as c_db:
+        await init_chat_db(c_db)
+        async with c_db.execute("SELECT name FROM sqlite_master WHERE type='table'") as cursor:
+            tables = [r[0] for r in await cursor.fetchall()]
+            assert "chat_sessions" in tables
+            assert "chat_messages" in tables
+            assert "students" not in tables
+            assert "quiz_records" not in tables
+

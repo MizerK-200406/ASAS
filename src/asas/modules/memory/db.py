@@ -5,7 +5,7 @@ import os
 from typing import AsyncGenerator
 import aiosqlite
 
-SCHEMA_SQL = """
+USER_SCHEMA_SQL = """
 CREATE TABLE IF NOT EXISTS students (
     student_id TEXT PRIMARY KEY,
     name TEXT NOT NULL,
@@ -54,13 +54,18 @@ CREATE TABLE IF NOT EXISTS student_activity_logs (
     FOREIGN KEY (student_id) REFERENCES students(student_id) ON DELETE CASCADE
 );
 
+CREATE INDEX IF NOT EXISTS idx_quiz_student ON quiz_records(student_id);
+CREATE INDEX IF NOT EXISTS idx_flashcard_student_next_review ON flashcard_progress(student_id, next_review);
+CREATE INDEX IF NOT EXISTS idx_activity_student ON student_activity_logs(student_id);
+"""
+
+CHAT_SCHEMA_SQL = """
 CREATE TABLE IF NOT EXISTS chat_sessions (
     id TEXT PRIMARY KEY,
     student_id TEXT NOT NULL,
     title TEXT NOT NULL,
     created_at TEXT NOT NULL,
-    updated_at TEXT NOT NULL,
-    FOREIGN KEY (student_id) REFERENCES students(student_id) ON DELETE CASCADE
+    updated_at TEXT NOT NULL
 );
 
 CREATE TABLE IF NOT EXISTS chat_messages (
@@ -73,20 +78,27 @@ CREATE TABLE IF NOT EXISTS chat_messages (
     FOREIGN KEY (session_id) REFERENCES chat_sessions(id) ON DELETE CASCADE
 );
 
-CREATE INDEX IF NOT EXISTS idx_quiz_student ON quiz_records(student_id);
-CREATE INDEX IF NOT EXISTS idx_flashcard_student_next_review ON flashcard_progress(student_id, next_review);
-CREATE INDEX IF NOT EXISTS idx_activity_student ON student_activity_logs(student_id);
 CREATE INDEX IF NOT EXISTS idx_chat_session_student ON chat_sessions(student_id);
 CREATE INDEX IF NOT EXISTS idx_chat_message_session ON chat_messages(session_id);
 """
 
+SCHEMA_SQL = USER_SCHEMA_SQL + "\n" + CHAT_SCHEMA_SQL
+
+
+async def init_user_db(db: aiosqlite.Connection) -> None:
+    """Tạo schema CSDL người dùng (students, quiz_records, flashcards, activities)."""
+    await db.executescript(USER_SCHEMA_SQL)
+    await db.commit()
+
+
+async def init_chat_db(db: aiosqlite.Connection) -> None:
+    """Tạo schema CSDL lịch sử hội thoại (chat_sessions, chat_messages)."""
+    await db.executescript(CHAT_SCHEMA_SQL)
+    await db.commit()
+
 
 async def init_db(db: aiosqlite.Connection) -> None:
-    """Tạo schema CSDL trên một kết nối SQLite đang mở.
-
-    Args:
-        db: Kết nối aiosqlite.Connection.
-    """
+    """Tạo toàn bộ schema CSDL trên một kết nối SQLite (hỗ trợ backward compatibility)."""
     await db.executescript(SCHEMA_SQL)
     await db.commit()
 
