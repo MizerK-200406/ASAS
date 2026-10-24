@@ -266,8 +266,18 @@ async def main():
             res = await calculator_tool.execute(expression=expr)
             if res.success:
                 print(f"✅ KẾT QUẢ: {res.output}")
+                await memory_service.log_activity(
+                    student_id=student_id,
+                    action_type="TOOL_CALCULATOR",
+                    description=f"Tính toán: '{expr}' -> Kết quả: {res.output}",
+                )
             else:
                 print(f"❌ LỖI: {res.error}")
+                await memory_service.log_activity(
+                    student_id=student_id,
+                    action_type="TOOL_CALCULATOR",
+                    description=f"Tính toán: '{expr}' -> Lỗi: {res.error}",
+                )
 
         elif choice == "4":
             print("\n🐍 SAFE PYTHON SANDBOX (Hỗ trợ toán học, thuật toán, numpy logic, json...)")
@@ -281,8 +291,18 @@ async def main():
             res = await python_tool.execute(code=code_input)
             if res.success:
                 print(f"✅ OUTPUT:\n{res.output}")
+                await memory_service.log_activity(
+                    student_id=student_id,
+                    action_type="TOOL_PYTHON_SANDBOX",
+                    description=f"Chạy mã Python thành công ({len(code_input.splitlines())} dòng)",
+                )
             else:
                 print(f"❌ LỖI / CHẶN BẢO MẬT:\n{res.error}")
+                await memory_service.log_activity(
+                    student_id=student_id,
+                    action_type="TOOL_PYTHON_SANDBOX",
+                    description=f"Chạy mã Python thất bại: {res.error[:60]}",
+                )
 
         elif choice == "5":
             print("\n🔍 DUCKDUCKGO WEB SEARCH (100% Free - Không cần API Key)")
@@ -294,8 +314,18 @@ async def main():
             res = await search_tool.execute(query=query_input, max_results=3)
             if res.success:
                 print(f"\n✅ KẾT QUẢ TÌM KIẾM:\n{res.output}")
+                await memory_service.log_activity(
+                    student_id=student_id,
+                    action_type="TOOL_WEB_SEARCH",
+                    description=f"Tìm kiếm web: '{query_input[:40]}'",
+                )
             else:
                 print(f"\n❌ LỖI TÌM KIẾM:\n{res.error}")
+                await memory_service.log_activity(
+                    student_id=student_id,
+                    action_type="TOOL_WEB_SEARCH",
+                    description=f"Tìm kiếm web thất bại: '{query_input[:40]}'",
+                )
 
         elif choice == "6":
             print("\n" + "=" * 60)
@@ -307,8 +337,14 @@ async def main():
             print("Gõ 'exit' hoặc 'q' để quay lại menu chính.")
             print("=" * 60 + "\n")
 
+            persistent_session_id = f"multiagent_{student_id}"
+            await memory_service.get_or_create_persistent_session(
+                session_id=persistent_session_id,
+                student_id=student_id,
+                title="Trao đổi Đa tác tử thông minh",
+            )
             session = memory_service.get_or_create_session(
-                session_id=f"multiagent_{student_id}",
+                session_id=persistent_session_id,
                 max_messages=10,
             )
 
@@ -321,6 +357,12 @@ async def main():
                     break
 
                 session.add_message("user", prompt)
+                await memory_service.save_chat_message(
+                    session_id=persistent_session_id,
+                    role="user",
+                    content=prompt,
+                )
+
                 print("⏳ Supervisor đang phân tích câu hỏi và điều phối tới chuyên gia phù hợp...")
                 try:
                     decision, response = await orchestrator.dispatch(
@@ -339,11 +381,17 @@ async def main():
                     print(f"\n🤖 [{role_name}]:\n{response.content}")
 
                     session.add_message("assistant", response.content)
+                    await memory_service.save_chat_message(
+                        session_id=persistent_session_id,
+                        role="assistant",
+                        content=response.content,
+                        agent_role=decision.next_agent.value,
+                    )
 
                     # Ghi nhật ký tương tác
                     await memory_service.log_activity(
                         student_id=student_id,
-                        action_type="CHAT_AGENT",
+                        action_type="MULTI_AGENT_CHAT",
                         description=f"Hỏi {role_name}: '{prompt[:30]}...'",
                     )
                 except Exception as e:
@@ -351,12 +399,11 @@ async def main():
 
         elif choice == "7":
             print("\n" + "=" * 65)
-            print("📊 HỒ SƠ HỌC TẬP & NHẬT KÝ HOẠT ĐỘNG (SQLITE DATABASE)")
+            print("📊 HỒ SƠ HỌC TẬP & DÒNG THỜI GIAN HOẠT ĐỘNG (SQLITE DATABASE)")
             print("=" * 65)
-            summary = await memory_service.get_student_summary(student_id)
+            summary = await memory_service.get_student_summary(student_id, activity_limit=10)
             profile = summary["profile"]
             stats = summary["quiz_stats"]
-            recent = summary["recent_quizzes"]
             activities = summary.get("recent_activities", [])
 
             print(f"👤 Học sinh: {profile.name} (Mã ID: {profile.student_id})")
@@ -374,38 +421,32 @@ async def main():
             print(f"- Điểm trung bình: {stats['average_score']}%")
             print(f"- Tổng số câu làm đúng: {stats['total_correct']}/{stats['total_questions']}")
 
-            print("\n📜 5 bài Quiz gần nhất:")
-            if not recent:
-                print("  (Chưa có bài quiz nào được ghi nhận)")
-            else:
-                for idx, q in enumerate(recent, 1):
-                    date_str = q.completed_at.strftime("%Y-%m-%d %H:%M")
-                    q_id_badge = f"[Mã #{q.id}] " if q.id else ""
-                    print(f"  {idx}. [{date_str}] {q_id_badge}Chủ đề: {q.topic} - Điểm: {q.score_percentage}% ({q.correct_count}/{q.total_questions})")
-
-            print("\n🕒 5 Hoạt động gần nhất:")
+            print("\n🕒 DÒNG THỜI GIAN HOẠT ĐỘNG GẦN NHẤT (10 hoạt động gần nhất):")
             if not activities:
                 print("  (Chưa có hoạt động nào được ghi nhận)")
             else:
+                action_icons = {
+                    "QUIZ_COMPLETED": "🎯",
+                    "TOOL_CALCULATOR": "🧮",
+                    "TOOL_PYTHON_SANDBOX": "🐍",
+                    "TOOL_WEB_SEARCH": "🔍",
+                    "MULTI_AGENT_CHAT": "🤖",
+                    "CHAT_AGENT": "🤖",
+                    "FLASHCARDS_IMPORTED": "🧠",
+                    "FLASHCARD_REVIEWED": "🧠",
+                }
                 for idx, act in enumerate(activities, 1):
                     act_date = act.created_at.strftime("%Y-%m-%d %H:%M")
-                    print(f"  {idx}. [{act_date}] [{act.action_type}] {act.description}")
+                    icon = action_icons.get(act.action_type, "📝")
+                    print(f"  {idx}. [{act_date}] {icon} [{act.action_type}] {act.description}")
 
-            # Chế độ xem chi tiết bài kiểm tra (Detail Drilldown on demand)
-            if recent:
-                print("\n" + "-" * 65)
-                detail_choice = input("👉 Nhập số thứ tự (1, 2, ...) hoặc Mã bài thi để xem chi tiết nhận xét & lời phê AI (Enter để quay lại): ").strip()
-                if detail_choice:
-                    target_quiz = None
-                    if detail_choice.isdigit():
-                        num = int(detail_choice)
-                        if 1 <= num <= len(recent):
-                            target_quiz = recent[num - 1]
-                        else:
-                            target_quiz = await memory_service.get_quiz_record_by_id(num)
-                    elif detail_choice.startswith("#") and detail_choice[1:].isdigit():
-                        target_quiz = await memory_service.get_quiz_record_by_id(int(detail_choice[1:]))
-
+            # Tra cứu chi tiết bài Quiz theo mã ID khi cần
+            print("\n" + "-" * 65)
+            detail_choice = input("👉 Nhập mã bài thi (VD: 1 hoặc #1) để xem chi tiết nhận xét & lời phê AI (Enter để quay lại): ").strip()
+            if detail_choice:
+                clean_id = detail_choice.lstrip("#")
+                if clean_id.isdigit():
+                    target_quiz = await memory_service.get_quiz_record_by_id(int(clean_id))
                     if target_quiz:
                         print("\n" + "=" * 65)
                         badge_id = f"#{target_quiz.id} " if target_quiz.id else ""
@@ -423,7 +464,9 @@ async def main():
                         print("=" * 65)
                         input("\n👉 Nhấn Enter để quay lại menu chính...")
                     else:
-                        print("⚠️ Không tìm thấy bài kiểm tra phù hợp.")
+                        print(f"⚠️ Không tìm thấy bài kiểm tra có mã #{clean_id}.")
+                else:
+                    print("⚠️ Mã bài thi không hợp lệ.")
 
         elif choice == "8":
             print("\n" + "=" * 55)
