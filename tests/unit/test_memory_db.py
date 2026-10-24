@@ -43,6 +43,21 @@ async def test_init_db_in_memory_creates_tables():
             assert row is not None
             assert row[0] == "student_activity_logs"
 
+        # Kiểm tra bảng chat_sessions và chat_messages bền vững
+        async with db.execute(
+            "SELECT name FROM sqlite_master WHERE type='table' AND name='chat_sessions'"
+        ) as cursor:
+            row = await cursor.fetchone()
+            assert row is not None
+            assert row[0] == "chat_sessions"
+
+        async with db.execute(
+            "SELECT name FROM sqlite_master WHERE type='table' AND name='chat_messages'"
+        ) as cursor:
+            row = await cursor.fetchone()
+            assert row is not None
+            assert row[0] == "chat_messages"
+
         # Kiểm tra các cột mở rộng của students
         async with db.execute("PRAGMA table_info(students)") as cursor:
             columns = [c[1] for c in await cursor.fetchall()]
@@ -54,6 +69,7 @@ async def test_init_db_in_memory_creates_tables():
             columns = [c[1] for c in await cursor.fetchall()]
             for col in ["ai_praise", "ai_critique", "improvement_plan"]:
                 assert col in columns
+
 
 
 

@@ -54,9 +54,30 @@ CREATE TABLE IF NOT EXISTS student_activity_logs (
     FOREIGN KEY (student_id) REFERENCES students(student_id) ON DELETE CASCADE
 );
 
+CREATE TABLE IF NOT EXISTS chat_sessions (
+    id TEXT PRIMARY KEY,
+    student_id TEXT NOT NULL,
+    title TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    FOREIGN KEY (student_id) REFERENCES students(student_id) ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS chat_messages (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    session_id TEXT NOT NULL,
+    role TEXT NOT NULL,
+    content TEXT NOT NULL,
+    agent_role TEXT,
+    created_at TEXT NOT NULL,
+    FOREIGN KEY (session_id) REFERENCES chat_sessions(id) ON DELETE CASCADE
+);
+
 CREATE INDEX IF NOT EXISTS idx_quiz_student ON quiz_records(student_id);
 CREATE INDEX IF NOT EXISTS idx_flashcard_student_next_review ON flashcard_progress(student_id, next_review);
 CREATE INDEX IF NOT EXISTS idx_activity_student ON student_activity_logs(student_id);
+CREATE INDEX IF NOT EXISTS idx_chat_session_student ON chat_sessions(student_id);
+CREATE INDEX IF NOT EXISTS idx_chat_message_session ON chat_messages(session_id);
 """
 
 
