@@ -68,6 +68,28 @@ class StudentActivityLog(BaseModel):
     created_at: datetime = Field(default_factory=utc_now)
 
 
+class ChatSessionRecord(BaseModel):
+    """Mô hình dữ liệu lưu trữ một phiên hội thoại học tập trong CSDL SQLite."""
+
+    id: str
+    student_id: str
+    title: str = "Hội thoại học tập"
+    created_at: datetime = Field(default_factory=utc_now)
+    updated_at: datetime = Field(default_factory=utc_now)
+
+
+class ChatMessageRecord(BaseModel):
+    """Bản ghi chi tiết một tin nhắn trong phiên hội thoại được lưu bền vững."""
+
+    id: Optional[int] = None
+    session_id: str
+    role: str
+    content: str
+    agent_role: Optional[str] = None
+    created_at: datetime = Field(default_factory=utc_now)
+
+
+
 
 class FlashcardProgress(BaseModel):
     """Trạng thái học tập và hẹn lịch ôn tập của một Flashcard theo thuật toán SM-2."""
