@@ -3,7 +3,10 @@
 import asyncio
 import hashlib
 import os
+import re
 import sys
+import uuid
+
 
 # Cấu hình UTF-8 cho Windows Terminal hiển thị tiếng Việt mượt mà
 if sys.platform == "win32":
@@ -62,40 +65,72 @@ async def main():
         memory_service=memory_service,
     )
 
-    student_name = input("\n👤 Nhập tên học sinh của bạn (Nhấn Enter để dùng 'Phạm Dương'): ").strip()
-    if not student_name:
-        student_name = "Phạm Dương"
+    # -------------------------------------------------------------
+    # Quản lý danh tính học sinh (Identity & Profile Selection)
+    # -------------------------------------------------------------
+    existing_students = await memory_service.get_all_students()
+    student_profile = None
 
-    # Tạo mã ID ổn định theo tên học sinh (Deterministic Hash ID) để hỗ trợ nhiều học sinh khác nhau
-    name_hash = hashlib.md5(student_name.lower().strip().encode("utf-8")).hexdigest()[:6]
-    student_id = f"st_{name_hash}"
+    if existing_students:
+        print("\n" + "=" * 60)
+        print("👥 DANH SÁCH HỒ SƠ HỌC SINH ĐÃ LƯU TRONG CƠ SỞ DỮ LIỆU")
+        print("=" * 60)
+        for idx, st in enumerate(existing_students, 1):
+            grade_str = f"[{st.grade_level}]" if st.grade_level else ""
+            school_str = f"({st.school})" if st.school else ""
+            print(f"  {idx}. {st.name} {grade_str} {school_str} - Mã ID: {st.student_id}")
 
-    # Lấy hồ sơ học sinh
-    existing = await memory_service.get_or_create_student(
-        student_id=student_id,
-        name=student_name,
-    )
+        print("\n[LỰA CHỌN ĐĂNG NHẬP]:")
+        print("  - Nhập số thứ tự (1, 2, ...) để chọn nhanh hồ sơ.")
+        print("  - Nhập 'new' để tạo một hồ sơ học sinh mới hoàn toàn.")
+        print("  - Nhập mã ID / Username cụ thể để đăng nhập trực tiếp.")
+        user_choice = input("\n👉 Lựa chọn của bạn (Nhấn Enter để chọn hồ sơ số 1): ").strip()
 
-    # Nếu là học sinh mới hoặc chưa có thông tin lớp, cho phép thiết lập hồ sơ
-    if not existing.grade_level:
-        print(f"\n📝 Thiết lập hồ sơ học tập cho {existing.name}:")
+        if not user_choice and len(existing_students) > 0:
+            student_profile = existing_students[0]
+        elif user_choice.isdigit() and 1 <= int(user_choice) <= len(existing_students):
+            student_profile = existing_students[int(user_choice) - 1]
+        elif user_choice.lower() == "new":
+            student_profile = None
+        else:
+            # Tìm theo student_id chính xác
+            for st in existing_students:
+                if st.student_id.lower() == user_choice.lower():
+                    student_profile = st
+                    break
+
+    # Nếu chưa có hồ sơ nào hoặc người dùng chọn tạo mới:
+    if not student_profile:
+        print("\n" + "=" * 60)
+        print("📝 ĐĂNG KÝ HỒ SƠ HỌC SINH MỚI (CHỐNG TRÙNG DANH TÍNH)")
+        print("=" * 60)
+        raw_name = input("👤 Họ và tên học sinh (VD: Nguyễn Duy Long, Phạm Dương): ").strip()
+        if not raw_name:
+            raw_name = "Nguyễn Duy Long"
+
+        default_uname = re.sub(r'[^a-zA-Z0-9]', '', raw_name.lower())[:8] or "student"
+        suggested_id = f"{default_uname}_{uuid.uuid4().hex[:4]}"
+        uname_input = input(f"🔑 Mã học sinh / Username riêng biệt (Enter để dùng '{suggested_id}'): ").strip()
+        if not uname_input:
+            uname_input = suggested_id
+
+        student_id_val = f"st_{uname_input.lower().strip()}"
         grade_input = input("🏫 Bạn đang học lớp mấy? (VD: Lớp 10, Lớp 12, Đại học - Enter để bỏ qua): ").strip()
         school_input = input("🏛️  Trường học của bạn? (VD: THPT Chuyên Hà Nội - Amsterdam - Enter để bỏ qua): ").strip()
         goal_input = input("🎯 Mục tiêu học tập? (VD: Đạt 9.0 điểm môn Toán - Enter để bỏ qua): ").strip()
 
-        if grade_input:
-            existing.grade_level = grade_input
-        if school_input:
-            existing.school = school_input
-        if goal_input:
-            existing.target_goal = goal_input
-        student_profile = await memory_service.update_student_profile(existing)
-    else:
-        student_profile = existing
+        student_profile = await memory_service.get_or_create_student(
+            student_id=student_id_val,
+            name=raw_name,
+            grade_level=grade_input or "Lớp 12",
+            school=school_input or "THPT",
+            target_goal=goal_input or "Học giỏi toàn diện",
+        )
 
+    student_id = student_profile.student_id
     grade_badge = f"[{student_profile.grade_level}]" if student_profile.grade_level else ""
     school_badge = f"- {student_profile.school}" if student_profile.school else ""
-    print(f"👋 Chào mừng {student_profile.name} {grade_badge} {school_badge} (Mã ID: {student_profile.student_id})!")
+    print(f"\n👋 Đã đăng nhập: {student_profile.name} {grade_badge} {school_badge} (Mã ID: {student_profile.student_id})")
     print("✨ Hệ thống Hồ sơ cá nhân hóa, Bộ nhớ & Spaced Repetition đã sẵn sàng.\n")
 
     while True:
@@ -345,9 +380,8 @@ async def main():
             else:
                 for idx, q in enumerate(recent, 1):
                     date_str = q.completed_at.strftime("%Y-%m-%d %H:%M")
-                    print(f"  {idx}. [{date_str}] Chủ đề: {q.topic} - Điểm: {q.score_percentage}% ({q.correct_count}/{q.total_questions})")
-                    if q.ai_critique:
-                        print(f"     💬 Lời phê AI: {q.ai_critique.strip()[:120]}...")
+                    q_id_badge = f"[Mã #{q.id}] " if q.id else ""
+                    print(f"  {idx}. [{date_str}] {q_id_badge}Chủ đề: {q.topic} - Điểm: {q.score_percentage}% ({q.correct_count}/{q.total_questions})")
 
             print("\n🕒 5 Hoạt động gần nhất:")
             if not activities:
@@ -356,6 +390,40 @@ async def main():
                 for idx, act in enumerate(activities, 1):
                     act_date = act.created_at.strftime("%Y-%m-%d %H:%M")
                     print(f"  {idx}. [{act_date}] [{act.action_type}] {act.description}")
+
+            # Chế độ xem chi tiết bài kiểm tra (Detail Drilldown on demand)
+            if recent:
+                print("\n" + "-" * 65)
+                detail_choice = input("👉 Nhập số thứ tự (1, 2, ...) hoặc Mã bài thi để xem chi tiết nhận xét & lời phê AI (Enter để quay lại): ").strip()
+                if detail_choice:
+                    target_quiz = None
+                    if detail_choice.isdigit():
+                        num = int(detail_choice)
+                        if 1 <= num <= len(recent):
+                            target_quiz = recent[num - 1]
+                        else:
+                            target_quiz = await memory_service.get_quiz_record_by_id(num)
+                    elif detail_choice.startswith("#") and detail_choice[1:].isdigit():
+                        target_quiz = await memory_service.get_quiz_record_by_id(int(detail_choice[1:]))
+
+                    if target_quiz:
+                        print("\n" + "=" * 65)
+                        badge_id = f"#{target_quiz.id} " if target_quiz.id else ""
+                        print(f"🔍 CHI TIẾT BÀI KIỂM TRA {badge_id}- CHỦ ĐỀ: {target_quiz.topic.upper()}")
+                        print("=" * 65)
+                        date_str = target_quiz.completed_at.strftime("%Y-%m-%d %H:%M:%S")
+                        print(f"📅 Thời gian hoàn thành: {date_str}")
+                        print(f"🎯 Điểm số: {target_quiz.score_percentage}% ({target_quiz.correct_count}/{target_quiz.total_questions} câu)")
+                        if target_quiz.ai_praise:
+                            print(f"\n🌟 Lời khen ngợi từ AI:\n   {target_quiz.ai_praise}")
+                        if target_quiz.ai_critique:
+                            print(f"\n💬 Nhận xét sư phạm & Góp ý từ AI:\n   {target_quiz.ai_critique}")
+                        if target_quiz.improvement_plan:
+                            print(f"\n🚀 Kế hoạch cải thiện đề xuất:\n   {target_quiz.improvement_plan}")
+                        print("=" * 65)
+                        input("\n👉 Nhấn Enter để quay lại menu chính...")
+                    else:
+                        print("⚠️ Không tìm thấy bài kiểm tra phù hợp.")
 
         elif choice == "8":
             print("\n" + "=" * 55)
