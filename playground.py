@@ -25,9 +25,6 @@ from asas.modules.quiz.service import QuizService
 from asas.modules.flashcard.schemas import FlashcardGenerationRequest
 from asas.modules.flashcard.service import FlashcardService
 from asas.core.llm_client import LLMClient
-from asas.modules.tools.calculator import CalculatorTool
-from asas.modules.tools.python_executor import PythonExecutorTool
-from asas.modules.tools.web_search import WebSearchTool
 from asas.modules.tools.registry import create_default_registry
 from asas.modules.memory.service import MemoryService
 from asas.modules.agents.orchestrator import MultiAgentOrchestrator
@@ -48,14 +45,11 @@ async def main():
 
     quiz_service = QuizService()
     flashcard_service = FlashcardService()
-    calculator_tool = CalculatorTool()
-    python_tool = PythonExecutorTool()
-    search_tool = WebSearchTool()
     llm_client = LLMClient()
     tool_registry = create_default_registry()
 
-    # Khởi tạo Memory Service (SQLite async)
-    memory_service = MemoryService(db_path="data/asas.db")
+    # Khởi tạo Memory Service phân tách 2 CSDL riêng biệt trong thư mục data/
+    memory_service = MemoryService(user_db_path="data/users.db", chat_db_path="data/chats.db")
     await memory_service.initialize()
 
     # Khởi tạo Multi-Agent Orchestrator
@@ -134,17 +128,13 @@ async def main():
     print("✨ Hệ thống Hồ sơ cá nhân hóa, Bộ nhớ & Spaced Repetition đã sẵn sàng.\n")
 
     while True:
-        print("\n--- MENU TRẢI NGHIỆM ---")
+        print("\n--- MENU TRẢI NGHIỆM AI STUDY ASSISTANT ---")
         print("1. Tạo bộ câu hỏi trắc nghiệm (Quiz) & Làm bài thử (Tự động lưu điểm)")
-        print("2. Tạo bộ thẻ ghi nhớ (Flashcards) (Tự động nạp vào lịch ôn tập)")
-        print("3. Dùng thử công cụ Calculator (Tính toán toán học an toàn)")
-        print("4. Dùng thử công cụ Safe Python Sandbox (Chạy mã Python an toàn)")
-        print("5. Dùng thử công cụ Web Search (Tìm kiếm internet miễn phí qua DuckDuckGo)")
-        print("6. Chat Đa tác tử thông minh (Multi-Agent: Supervisor -> Tutor / Evaluator / Planner)")
-        print("7. Xem Hồ sơ & Thống kê học tập cá nhân (SQLite Database)")
-        print("8. Ôn tập Flashcards thông minh (Thuật toán Spaced Repetition SM-2)")
+        print("2. Tạo bộ thẻ ghi nhớ (Flashcards) (Tự động nạp vào hệ thống)")
+        print("3. Chat Đa tác tử thông minh (Multi-Agent: Tutor / Evaluator / Planner với Tools)")
+        print("4. Xem Hồ sơ & Dòng thời gian hoạt động (SQLite Database)")
         print("0. Thoát")
-        choice = input("\nChọn chức năng (0/1/2/3/4/5/6/7/8): ").strip()
+        choice = input("\nChọn chức năng (0/1/2/3/4): ").strip()
 
         if choice == "0":
             print("Tạm biệt! Hẹn gặp lại bạn.")
@@ -257,81 +247,10 @@ async def main():
                 print(f"❌ Lỗi khi tạo Flashcards: {e}")
 
         elif choice == "3":
-            print("\n💡 Hỗ trợ: +, -, *, /, **, sqrt(), sin(), cos(), abs(), pi, e...")
-            expr = input("Nhập biểu thức cần tính (VD: sqrt(144) + 2**3, 25 * 4 + 10): ").strip()
-            if not expr:
-                expr = "sqrt(144) + 2**3"
-
-            print(f"\n⏳ Đang tính toán: '{expr}'...")
-            res = await calculator_tool.execute(expression=expr)
-            if res.success:
-                print(f"✅ KẾT QUẢ: {res.output}")
-                await memory_service.log_activity(
-                    student_id=student_id,
-                    action_type="TOOL_CALCULATOR",
-                    description=f"Tính toán: '{expr}' -> Kết quả: {res.output}",
-                )
-            else:
-                print(f"❌ LỖI: {res.error}")
-                await memory_service.log_activity(
-                    student_id=student_id,
-                    action_type="TOOL_CALCULATOR",
-                    description=f"Tính toán: '{expr}' -> Lỗi: {res.error}",
-                )
-
-        elif choice == "4":
-            print("\n🐍 SAFE PYTHON SANDBOX (Hỗ trợ toán học, thuật toán, numpy logic, json...)")
-            print("Nhập đoạn mã Python (sử dụng print() để xuất kết quả).")
-            print("Gõ code trên một dòng, hoặc nhấn Enter để dùng code mẫu tính dãy Fibonacci:")
-            code_input = input("Code: ").strip()
-            if not code_input:
-                code_input = "def fib(n):\n    a, b = 0, 1\n    for _ in range(n):\n        a, b = b, a + b\n    return a\nprint('Fibonacci(15) =', fib(15))"
-
-            print(f"\n⏳ Đang thực thi trong Sandbox an toàn...")
-            res = await python_tool.execute(code=code_input)
-            if res.success:
-                print(f"✅ OUTPUT:\n{res.output}")
-                await memory_service.log_activity(
-                    student_id=student_id,
-                    action_type="TOOL_PYTHON_SANDBOX",
-                    description=f"Chạy mã Python thành công ({len(code_input.splitlines())} dòng)",
-                )
-            else:
-                print(f"❌ LỖI / CHẶN BẢO MẬT:\n{res.error}")
-                await memory_service.log_activity(
-                    student_id=student_id,
-                    action_type="TOOL_PYTHON_SANDBOX",
-                    description=f"Chạy mã Python thất bại: {res.error[:60]}",
-                )
-
-        elif choice == "5":
-            print("\n🔍 DUCKDUCKGO WEB SEARCH (100% Free - Không cần API Key)")
-            query_input = input("Nhập từ khóa tìm kiếm (VD: FastAPI tutorial, Python 3.12 new features): ").strip()
-            if not query_input:
-                query_input = "Python 3.12 new features"
-
-            print(f"\n⏳ Đang tìm kiếm trên Internet: '{query_input}'...")
-            res = await search_tool.execute(query=query_input, max_results=3)
-            if res.success:
-                print(f"\n✅ KẾT QUẢ TÌM KIẾM:\n{res.output}")
-                await memory_service.log_activity(
-                    student_id=student_id,
-                    action_type="TOOL_WEB_SEARCH",
-                    description=f"Tìm kiếm web: '{query_input[:40]}'",
-                )
-            else:
-                print(f"\n❌ LỖI TÌM KIẾM:\n{res.error}")
-                await memory_service.log_activity(
-                    student_id=student_id,
-                    action_type="TOOL_WEB_SEARCH",
-                    description=f"Tìm kiếm web thất bại: '{query_input[:40]}'",
-                )
-
-        elif choice == "6":
             print("\n" + "=" * 60)
             print("🤖 HỆ THỐNG ĐA TÁC TỬ THÔNG MINH (MULTI-AGENT ORCHESTRATION)")
             print("1. Supervisor: Phân tích câu hỏi & tự động điều phối chuyên gia.")
-            print("2. Tutor Agent: Giảng dạy Socratic & tự động gọi Tools tính toán/code.")
+            print("2. Tutor Agent: Giảng dạy Socratic & tự động gọi Tools tính toán/code/tra cứu.")
             print("3. Evaluator Agent: Chấm điểm bài giải, phản biện logic & tìm lỗi sai.")
             print("4. Planner Agent: Phân tích điểm yếu từ Memory để lên lộ trình học tập.")
             print("Gõ 'exit' hoặc 'q' để quay lại menu chính.")
@@ -397,7 +316,7 @@ async def main():
                 except Exception as e:
                     print(f"❌ Lỗi khi điều phối đa tác tử: {e}")
 
-        elif choice == "7":
+        elif choice == "4":
             print("\n" + "=" * 65)
             print("📊 HỒ SƠ HỌC TẬP & DÒNG THỜI GIAN HOẠT ĐỘNG (SQLITE DATABASE)")
             print("=" * 65)
@@ -467,34 +386,6 @@ async def main():
                         print(f"⚠️ Không tìm thấy bài kiểm tra có mã #{clean_id}.")
                 else:
                     print("⚠️ Mã bài thi không hợp lệ.")
-
-        elif choice == "8":
-            print("\n" + "=" * 55)
-            print("🧠 ÔN TẬP FLASHCARDS THÔNG MINH (SUPERMEMO SM-2)")
-            print("Hệ thống tự động lọc các thẻ đã đến hạn cần ôn tập hôm nay.")
-            print("=" * 55)
-
-            due_cards = await memory_service.get_due_flashcards(student_id)
-            if not due_cards:
-                print("\n🎉 Tuyệt vời! Hiện tại bạn không có thẻ nào cần ôn tập hôm nay.")
-            else:
-                print(f"\n📚 Bạn có {len(due_cards)} thẻ cần ôn tập:\n")
-                for idx, card in enumerate(due_cards, 1):
-                    print(f"--- Thẻ {idx}/{len(due_cards)} ---")
-                    print(f"❓ Mặt trước: {card.front}")
-                    input("👉 Nhấn Enter để xem đáp án...")
-                    print(f"✅ Mặt sau: {card.back}")
-
-                    while True:
-                        q_str = input("\nĐánh giá mức độ nhớ (0: Quên sạch -> 5: Nhớ hoàn hảo): ").strip()
-                        if q_str in ("0", "1", "2", "3", "4", "5"):
-                            q_val = int(q_str)
-                            break
-                        print("Vui lòng nhập một số từ 0 đến 5!")
-
-                    updated = await memory_service.review_flashcard(card.card_id, quality=q_val)
-                    print(f"📅 SM-2 xếp lịch: Lần ôn tiếp theo sau {updated.interval_days} ngày (Ease Factor: {updated.ease_factor})\n")
-                print("🎉 Bạn đã hoàn thành phiên ôn tập Flashcard hôm nay!")
 
         else:
             print("Lựa chọn không hợp lệ, vui lòng chọn lại!")
