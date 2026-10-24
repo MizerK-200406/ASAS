@@ -247,3 +247,49 @@ async def test_get_quiz_record_by_id_drilldown(repo):
     assert non_existent is None
 
 
+@pytest.mark.asyncio
+async def test_chat_session_and_messages_persistence(repo):
+    """Kiểm tra lưu trữ và truy xuất bền vững phiên chat và các tin nhắn trong SQLite."""
+    await repo.initialize()
+    await repo.get_or_create_student("st_01", "Nguyễn Duy Long")
+
+    # Tạo phiên chat
+    session = await repo.create_or_get_chat_session(
+        session_id="sess_math_01",
+        student_id="st_01",
+        title="Hỏi bài Tích phân từng phần",
+    )
+    assert session.id == "sess_math_01"
+    assert session.student_id == "st_01"
+
+    # Lưu tin nhắn người dùng và tin nhắn AI
+    msg1 = await repo.save_chat_message(
+        session_id="sess_math_01",
+        role="user",
+        content="Công thức tích phân từng phần là gì?",
+    )
+    assert msg1.id is not None
+    assert msg1.content == "Công thức tích phân từng phần là gì?"
+
+    msg2 = await repo.save_chat_message(
+        session_id="sess_math_01",
+        role="assistant",
+        content="Công thức là: \int u dv = uv - \int v du.",
+        agent_role="tutor",
+    )
+    assert msg2.agent_role == "tutor"
+
+    # Lấy lại lịch sử tin nhắn của phiên
+    history = await repo.get_session_chat_messages("sess_math_01")
+    assert len(history) == 2
+    assert history[0].role == "user"
+    assert history[1].role == "assistant"
+    assert history[1].agent_role == "tutor"
+
+    # Lấy danh sách các phiên chat của học sinh
+    sessions = await repo.get_student_chat_sessions("st_01")
+    assert len(sessions) == 1
+    assert sessions[0].title == "Hỏi bài Tích phân từng phần"
+
+
+

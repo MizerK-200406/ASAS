@@ -7,6 +7,8 @@ import aiosqlite
 import uuid
 from asas.modules.memory.db import get_db_connection, init_db
 from asas.modules.memory.schemas import (
+    ChatMessageRecord,
+    ChatSessionRecord,
     FlashcardProgress,
     QuizRecord,
     SM2ReviewResult,
@@ -462,4 +464,141 @@ class MemoryRepository:
                     )
                     for row in rows
                 ]
+
+    # -------------------------------------------------------------
+    # 5. Persistent Chat Sessions & Messages (Lưu hội thoại bền vững)
+    # -------------------------------------------------------------
+
+    async def create_or_get_chat_session(
+        self,
+        session_id: str,
+        student_id: str,
+        title: str = "Hội thoại học tập",
+    ) -> ChatSessionRecord:
+        """Lấy phiên hội thoại hiện có hoặc tạo mới nếu chưa tồn tại."""
+        async with get_db_connection(self.db_path) as db:
+            db.row_factory = aiosqlite.Row
+            async with db.execute(
+                "SELECT * FROM chat_sessions WHERE id = ?", (session_id,)
+            ) as cursor:
+                row = await cursor.fetchone()
+                if row:
+                    return ChatSessionRecord(
+                        id=row["id"],
+                        student_id=row["student_id"],
+                        title=row["title"],
+                        created_at=datetime.fromisoformat(row["created_at"]),
+                        updated_at=datetime.fromisoformat(row["updated_at"]),
+                    )
+
+            now = utc_now()
+            session = ChatSessionRecord(
+                id=session_id,
+                student_id=student_id,
+                title=title,
+                created_at=now,
+                updated_at=now,
+            )
+            await db.execute(
+                """INSERT INTO chat_sessions (id, student_id, title, created_at, updated_at)
+                   VALUES (?, ?, ?, ?, ?)""",
+                (
+                    session.id,
+                    session.student_id,
+                    session.title,
+                    session.created_at.isoformat(),
+                    session.updated_at.isoformat(),
+                ),
+            )
+            await db.commit()
+            return session
+
+    async def get_student_chat_sessions(
+        self,
+        student_id: str,
+        limit: int = 20,
+    ) -> List[ChatSessionRecord]:
+        """Lấy danh sách các phiên chat của học sinh (phục vụ sidebar trên Web)."""
+        async with get_db_connection(self.db_path) as db:
+            db.row_factory = aiosqlite.Row
+            async with db.execute(
+                """SELECT * FROM chat_sessions
+                   WHERE student_id = ?
+                   ORDER BY updated_at DESC, created_at DESC
+                   LIMIT ?""",
+                (student_id, limit),
+            ) as cursor:
+                rows = await cursor.fetchall()
+                return [
+                    ChatSessionRecord(
+                        id=row["id"],
+                        student_id=row["student_id"],
+                        title=row["title"],
+                        created_at=datetime.fromisoformat(row["created_at"]),
+                        updated_at=datetime.fromisoformat(row["updated_at"]),
+                    )
+                    for row in rows
+                ]
+
+    async def save_chat_message(
+        self,
+        session_id: str,
+        role: str,
+        content: str,
+        agent_role: Optional[str] = None,
+    ) -> ChatMessageRecord:
+        """Lưu bền vững một tin nhắn trong phiên chat vào CSDL SQLite."""
+        now = utc_now()
+        async with get_db_connection(self.db_path) as db:
+            cursor = await db.execute(
+                """INSERT INTO chat_messages (session_id, role, content, agent_role, created_at)
+                   VALUES (?, ?, ?, ?, ?)""",
+                (session_id, role, content, agent_role, now.isoformat()),
+            )
+            message_id = cursor.lastrowid
+
+            # Cập nhật updated_at của session
+            await db.execute(
+                "UPDATE chat_sessions SET updated_at = ? WHERE id = ?",
+                (now.isoformat(), session_id),
+            )
+            await db.commit()
+
+            return ChatMessageRecord(
+                id=message_id,
+                session_id=session_id,
+                role=role,
+                content=content,
+                agent_role=agent_role,
+                created_at=now,
+            )
+
+    async def get_session_chat_messages(
+        self,
+        session_id: str,
+        limit: int = 50,
+    ) -> List[ChatMessageRecord]:
+        """Truy xuất toàn bộ lịch sử tin nhắn của một phiên chat theo thứ tự thời gian."""
+        async with get_db_connection(self.db_path) as db:
+            db.row_factory = aiosqlite.Row
+            async with db.execute(
+                """SELECT * FROM chat_messages
+                   WHERE session_id = ?
+                   ORDER BY id ASC
+                   LIMIT ?""",
+                (session_id, limit),
+            ) as cursor:
+                rows = await cursor.fetchall()
+                return [
+                    ChatMessageRecord(
+                        id=row["id"],
+                        session_id=row["session_id"],
+                        role=row["role"],
+                        content=row["content"],
+                        agent_role=row["agent_role"],
+                        created_at=datetime.fromisoformat(row["created_at"]),
+                    )
+                    for row in rows
+                ]
+
 
