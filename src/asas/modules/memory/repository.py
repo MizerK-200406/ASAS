@@ -5,7 +5,7 @@ import json
 from typing import Any, Dict, List, Optional
 import aiosqlite
 import uuid
-from asas.modules.memory.db import get_db_connection, init_db
+from asas.modules.memory.db import get_db_connection, init_db, init_user_db, init_chat_db
 from asas.modules.memory.schemas import (
     ChatMessageRecord,
     ChatSessionRecord,
@@ -21,13 +21,27 @@ from asas.modules.memory.schemas import (
 class MemoryRepository:
     """Repository quản lý truy xuất và lưu trữ dữ liệu học sinh trong SQLite async."""
 
-    def __init__(self, db_path: str = "data/asas.db") -> None:
-        self.db_path = db_path
+    def __init__(
+        self,
+        db_path: Optional[str] = None,
+        user_db_path: Optional[str] = None,
+        chat_db_path: Optional[str] = None,
+    ) -> None:
+        default_path = db_path or "data/asas.db"
+        self.user_db_path = user_db_path or default_path
+        self.chat_db_path = chat_db_path or default_path
+        self.db_path = self.user_db_path
 
     async def initialize(self) -> None:
-        """Khởi tạo database schema nếu chưa tồn tại."""
-        async with get_db_connection(self.db_path) as db:
-            await init_db(db)
+        """Khởi tạo database schemas."""
+        if self.user_db_path == self.chat_db_path:
+            async with get_db_connection(self.user_db_path) as db:
+                await init_db(db)
+        else:
+            async with get_db_connection(self.user_db_path) as u_db:
+                await init_user_db(u_db)
+            async with get_db_connection(self.chat_db_path) as c_db:
+                await init_chat_db(c_db)
 
     # -------------------------------------------------------------
     # 1. Student Profile
@@ -476,7 +490,7 @@ class MemoryRepository:
         title: str = "Hội thoại học tập",
     ) -> ChatSessionRecord:
         """Lấy phiên hội thoại hiện có hoặc tạo mới nếu chưa tồn tại."""
-        async with get_db_connection(self.db_path) as db:
+        async with get_db_connection(self.chat_db_path) as db:
             db.row_factory = aiosqlite.Row
             async with db.execute(
                 "SELECT * FROM chat_sessions WHERE id = ?", (session_id,)
@@ -519,7 +533,7 @@ class MemoryRepository:
         limit: int = 20,
     ) -> List[ChatSessionRecord]:
         """Lấy danh sách các phiên chat của học sinh (phục vụ sidebar trên Web)."""
-        async with get_db_connection(self.db_path) as db:
+        async with get_db_connection(self.chat_db_path) as db:
             db.row_factory = aiosqlite.Row
             async with db.execute(
                 """SELECT * FROM chat_sessions
@@ -549,7 +563,7 @@ class MemoryRepository:
     ) -> ChatMessageRecord:
         """Lưu bền vững một tin nhắn trong phiên chat vào CSDL SQLite."""
         now = utc_now()
-        async with get_db_connection(self.db_path) as db:
+        async with get_db_connection(self.chat_db_path) as db:
             cursor = await db.execute(
                 """INSERT INTO chat_messages (session_id, role, content, agent_role, created_at)
                    VALUES (?, ?, ?, ?, ?)""",
@@ -579,7 +593,7 @@ class MemoryRepository:
         limit: int = 50,
     ) -> List[ChatMessageRecord]:
         """Truy xuất toàn bộ lịch sử tin nhắn của một phiên chat theo thứ tự thời gian."""
-        async with get_db_connection(self.db_path) as db:
+        async with get_db_connection(self.chat_db_path) as db:
             db.row_factory = aiosqlite.Row
             async with db.execute(
                 """SELECT * FROM chat_messages

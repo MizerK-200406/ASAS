@@ -292,4 +292,42 @@ async def test_chat_session_and_messages_persistence(repo):
     assert sessions[0].title == "Hỏi bài Tích phân từng phần"
 
 
+@pytest.mark.asyncio
+async def test_dual_database_repository(tmp_path):
+    """Kiểm tra MemoryRepository hoạt động chuẩn xác khi phân tách users.db và chats.db."""
+    import aiosqlite
+
+    user_db = str(tmp_path / "users.db")
+    chat_db = str(tmp_path / "chats.db")
+
+    dual_repo = MemoryRepository(user_db_path=user_db, chat_db_path=chat_db)
+    await dual_repo.initialize()
+
+    # Thao tác với user_db
+    st = await dual_repo.get_or_create_student("st_dual_01", "Pham Duong", grade_level="Lớp 11")
+    assert st.student_id == "st_dual_01"
+
+    # Thao tác với chat_db
+    sess = await dual_repo.create_or_get_chat_session("sess_dual_01", "st_dual_01", title="Hỏi bài Sinh học")
+    assert sess.id == "sess_dual_01"
+
+    msg = await dual_repo.save_chat_message("sess_dual_01", role="user", content="Quang hợp là gì?")
+    assert msg.id is not None
+
+    # Xác thực trên tệp CSDL vật lý
+    async with aiosqlite.connect(user_db) as u_conn:
+        async with u_conn.execute("SELECT name FROM sqlite_master WHERE type='table'") as cur:
+            u_tables = [r[0] for r in await cur.fetchall()]
+            assert "students" in u_tables
+            assert "chat_sessions" not in u_tables
+
+    async with aiosqlite.connect(chat_db) as c_conn:
+        async with c_conn.execute("SELECT name FROM sqlite_master WHERE type='table'") as cur:
+            c_tables = [r[0] for r in await cur.fetchall()]
+            assert "chat_sessions" in c_tables
+            assert "chat_messages" in c_tables
+            assert "students" not in c_tables
+
+
+
 
