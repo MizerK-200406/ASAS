@@ -24,8 +24,17 @@ from asas.modules.memory.sm2 import calculate_sm2
 class MemoryService:
     """Service trung tâm điều phối toàn diện hệ thống bộ nhớ cho AI Study Assistant."""
 
-    def __init__(self, db_path: str = "data/asas.db") -> None:
-        self.repository = MemoryRepository(db_path=db_path)
+    def __init__(
+        self,
+        db_path: Optional[str] = None,
+        user_db_path: Optional[str] = None,
+        chat_db_path: Optional[str] = None,
+    ) -> None:
+        self.repository = MemoryRepository(
+            db_path=db_path,
+            user_db_path=user_db_path,
+            chat_db_path=chat_db_path,
+        )
         self._sessions: Dict[str, SessionMemory] = {}
 
     async def initialize(self) -> None:

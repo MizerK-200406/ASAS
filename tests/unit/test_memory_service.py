@@ -179,4 +179,34 @@ async def test_persistent_chat_service_and_expanded_activity_stream(memory_servi
     assert len(summary["recent_activities"]) == 10
 
 
+@pytest.mark.asyncio
+async def test_memory_service_dual_database_initialization(tmp_path):
+    """Kiểm tra MemoryService cấu hình và khởi tạo dual databases (users.db và chats.db)."""
+    user_db = str(tmp_path / "custom_users.db")
+    chat_db = str(tmp_path / "custom_chats.db")
+
+    service = MemoryService(user_db_path=user_db, chat_db_path=chat_db)
+    await service.initialize()
+
+    # Tạo học sinh
+    st = await service.get_or_create_student("st_svc_dual", "Le Thi C")
+    assert st.name == "Le Thi C"
+
+    # Tạo phiên chat và tin nhắn
+    sess = await service.get_or_create_persistent_session(
+        session_id="sess_dual_svc_01",
+        student_id="st_svc_dual",
+        title="Lịch sử Việt Nam",
+    )
+    assert sess.title == "Lịch sử Việt Nam"
+
+    msg = await service.save_chat_message(
+        session_id="sess_dual_svc_01",
+        role="user",
+        content="Chiến thắng Điện Biên Phủ năm nào?",
+    )
+    assert msg.id is not None
+
+
+
 
