@@ -135,3 +135,48 @@ async def test_get_all_students_and_quiz_detail(memory_service):
     assert detail.ai_praise == "Rất tốt!"
 
 
+@pytest.mark.asyncio
+async def test_persistent_chat_service_and_expanded_activity_stream(memory_service):
+    """Kiểm tra MemoryService lưu trữ phiên chat bền vững và mở rộng activity stream lên 10 mục."""
+    await memory_service.initialize()
+    await memory_service.get_or_create_student("st_user1", "Nguyễn Duy Long")
+
+    # Tạo phiên chat
+    session = await memory_service.get_or_create_persistent_session(
+        session_id="sess_physics_01",
+        student_id="st_user1",
+        title="Ôn tập Định luật Newton",
+    )
+    assert session.id == "sess_physics_01"
+
+    # Lưu tin nhắn
+    await memory_service.save_chat_message(
+        session_id="sess_physics_01",
+        role="user",
+        content="Định luật 2 Newton phát biểu thế nào?",
+    )
+    await memory_service.save_chat_message(
+        session_id="sess_physics_01",
+        role="assistant",
+        content="Gia tốc của một vật tỉ lệ thuận với lực tác dụng: F = m * a.",
+        agent_role="tutor",
+    )
+
+    messages = await memory_service.get_session_chat_messages("sess_physics_01")
+    assert len(messages) == 2
+    assert messages[0].content == "Định luật 2 Newton phát biểu thế nào?"
+    assert messages[1].agent_role == "tutor"
+
+    # Thêm 10 hoạt động khác nhau
+    for i in range(10):
+        await memory_service.log_activity(
+            student_id="st_user1",
+            action_type=f"ACTION_{i}",
+            description=f"Mô tả hoạt động số {i}",
+        )
+
+    summary = await memory_service.get_student_summary("st_user1")
+    assert len(summary["recent_activities"]) == 10
+
+
+
