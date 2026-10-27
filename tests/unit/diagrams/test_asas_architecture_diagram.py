@@ -3,8 +3,8 @@ from pathlib import Path
 
 
 def test_candidate_architecture_json_structure():
-    candidate_path = Path(".archify/architecture-asas-overview/candidate.json")
-    assert candidate_path.exists(), "candidate.json must exist in .archify/architecture-asas-overview/"
+    candidate_path = Path("docs/diagrams/candidate.json")
+    assert candidate_path.exists(), "candidate.json must exist in docs/diagrams/"
     
     with open(candidate_path, "r", encoding="utf-8") as f:
         data = json.load(f)

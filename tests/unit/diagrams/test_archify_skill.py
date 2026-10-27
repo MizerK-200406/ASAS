@@ -9,10 +9,12 @@ import pytest
 def test_archify_skill_structure_and_frontmatter():
     """Kiểm tra tệp SKILL.md của archify tồn tại và có frontmatter chuẩn Antigravity."""
     repo_root = Path(__file__).resolve().parents[3]
-    skill_dir = repo_root / ".agents" / "skills" / "archify"
+    local_skill_dir = repo_root / ".agents" / "skills" / "archify"
+    global_skill_dir = Path(os.path.expanduser("~")) / ".gemini" / "config" / "skills" / "archify"
+    skill_dir = local_skill_dir if local_skill_dir.is_dir() else global_skill_dir
     skill_md = skill_dir / "SKILL.md"
 
-    assert skill_dir.is_dir(), f"Thư mục skill không tồn tại: {skill_dir}"
+    assert skill_dir.is_dir(), f"Thư mục skill không tồn tại ở cả local và global: {skill_dir}"
     assert skill_md.is_file(), f"Tệp SKILL.md không tồn tại: {skill_md}"
 
     content = skill_md.read_text(encoding="utf-8")

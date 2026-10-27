@@ -7,7 +7,7 @@
 
 Hệ thống được thiết kế và trực quan hóa bằng công nghệ **Archify**, tạo ra tệp HTML tương tác độc lập (Standalone Interactive Diagram) tại:
 - **Đường dẫn tệp**: [`docs/diagrams/asas_architecture.html`](diagrams/asas_architecture.html)
-- **Đặc tả nguồn JSON**: [`.archify/architecture-asas-overview/candidate.json`](../.archify/architecture-asas-overview/candidate.json)
+- **Đặc tả nguồn JSON**: [`docs/diagrams/candidate.json`](candidate.json)
 
 ### Cách mở trên trình duyệt
 Chạy lệnh sau trong PowerShell tại thư mục gốc của dự án:
@@ -32,14 +32,13 @@ Start-Process "docs\diagrams\asas_architecture.html"
 
 ```text
 ASAS/
-├── .agents/skills/archify/          # Bộ kỹ năng Archify vẽ sơ đồ kiến trúc
-├── .archify/                        # Bản đặc tả JSON nguồn của sơ đồ
 ├── data/                            # Lưu trữ cơ sở dữ liệu SQLite kép (Dual DB)
 │   ├── users.db                     # Dữ liệu thực thể: học sinh, kết quả quiz, tiến độ SM-2, nhật ký
 │   └── chats.db                     # Dữ liệu sự kiện: phiên hội thoại và lịch sử tin nhắn
 ├── docs/                            # Thư mục tài liệu kỹ thuật
 │   ├── README.md                    # Tài liệu tổng quan kiến trúc & hướng dẫn sơ đồ
 │   └── diagrams/
+│       ├── candidate.json           # Bản đặc tả JSON nguồn của sơ đồ kiến trúc
 │       └── asas_architecture.html   # Sơ đồ kiến trúc tương tác hoàn chỉnh
 ├── src/asas/                        # Mã nguồn nghiệp vụ chính (Modular Monolith)
 │   ├── core/                        # Cấu hình Pydantic, LLM Client (NVIDIA NIM), Token Budget
