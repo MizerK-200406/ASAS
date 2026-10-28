@@ -28,7 +28,8 @@ class QuizService:
             "1. Câu hỏi rõ ràng, tập trung vào bản chất khái niệm hoặc ứng dụng thực tế.\n"
             "2. Các phương án sai (distractors) phải hợp lý, phản ánh đúng những lỗi sai phổ biến của người học.\n"
             "3. Duy nhất một đáp án đúng chính xác tuyệt đối.\n"
-            "4. Phần giải thích (explanation) phải ngắn gọn, súc tích và chỉ rõ tại sao đáp án đó là đúng."
+            "4. Phần giải thích (explanation) phải ngắn gọn, súc tích và chỉ rõ tại sao đáp án đó là đúng.\n"
+            "5. Tuyệt đối không sinh các cặp ngoặc rỗng ({}, }}). Giữ nội dung cô đọng để hoàn tất đầy đủ cấu trúc JSON."
         )
 
         user_prompt = (
@@ -36,7 +37,8 @@ class QuizService:
             f"- Số lượng câu hỏi: {request.num_questions}\n"
             f"- Mức độ khó: {request.difficulty.value}\n"
             f"- Ngôn ngữ yêu cầu: {request.language}\n"
-            f"- Đảm bảo mỗi câu hỏi có 4 lựa chọn (A, B, C, D) với correct_answer_id hợp lệ."
+            f"- Đảm bảo mỗi câu hỏi có 4 lựa chọn (A, B, C, D) với correct_answer_id hợp lệ.\n"
+            "- Hãy hoàn tất đầy đủ mọi câu hỏi và đóng mảng JSON đúng cú pháp."
         )
 
         messages = [
@@ -47,6 +49,7 @@ class QuizService:
         quiz = await self.llm_client.structured_output(
             messages=messages,
             response_model=Quiz,
+            temperature=0.4,
         )
 
         logger.info(f"Đã tạo thành công quiz '{quiz.title}' gồm {len(quiz.questions)} câu hỏi.")

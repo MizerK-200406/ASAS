@@ -44,6 +44,72 @@ class LLMClient:
             return text[start_obj : end_obj + 1].strip()
         return text
 
+    def _repair_truncated_json(self, text: str) -> str:
+        """Tự động vá chuỗi JSON bị ngắt cụt do chạm trần token hoặc lỗi kết thúc lửng lơ."""
+        text = text.strip()
+        start_idx = text.find("{")
+        if start_idx == -1:
+            return text
+        text = text[start_idx:]
+
+        # Nếu đã là JSON hợp lệ thì trả về luôn
+        try:
+            json.loads(text)
+            return text
+        except json.JSONDecodeError:
+            pass
+
+        # Chiến lược 1: Cắt bỏ phần tử dở dang cuối cùng trong mảng đối tượng
+        last_closed_brace = text.rfind("}")
+        if last_closed_brace != -1:
+            truncated = text[: last_closed_brace + 1].strip()
+            if truncated.endswith(","):
+                truncated = truncated[:-1].strip()
+
+            for suffix in ["]}", "\n  ]\n}", "}"]:
+                candidate = truncated + suffix
+                try:
+                    json.loads(candidate)
+                    logger.warning(f"Đã tự động phục hồi JSON bị cắt cụt bằng hậu tố '{suffix}'.")
+                    return candidate
+                except json.JSONDecodeError:
+                    continue
+
+        # Chiến lược 2: Cân bằng ngoặc LIFO nếu chuỗi kết thúc trong string/object
+        stack = []
+        in_string = False
+        escape = False
+
+        for char in text:
+            if char == '"' and not escape:
+                in_string = not in_string
+            elif not in_string:
+                if char in "{[":
+                    stack.append(char)
+                elif char in "}]" and stack:
+                    top = stack[-1]
+                    if (top == "{" and char == "}") or (top == "[" and char == "]"):
+                        stack.pop()
+
+            escape = (char == "\\" and not escape)
+
+        repaired = text
+        if in_string:
+            repaired += '"'
+
+        closers = {"{": "}", "[": "]"}
+        for opener in reversed(stack):
+            repaired += closers[opener]
+
+        try:
+            json.loads(repaired)
+            logger.warning("Đã tự động cân bằng ngoặc cho chuỗi JSON bị ngắt cụt.")
+            return repaired
+        except json.JSONDecodeError:
+            pass
+
+        return text
+
     async def chat_completion(
         self,
         messages: List[Dict[str, str]],
@@ -123,12 +189,29 @@ class LLMClient:
                 temperature=temperature,
                 max_tokens=max_tokens,
             )
-            message = response.choices[0].message
+            choice = response.choices[0]
+            finish_reason = getattr(choice, "finish_reason", None)
+            if finish_reason == "length":
+                logger.warning(
+                    f"LLM phản hồi chạm trần max_tokens ({max_tokens}). Sẽ kích hoạt cơ chế tự phục hồi JSON nếu cần."
+                )
+
+            message = choice.message
             # Hỗ trợ lấy content và fallback reasoning_content nếu là reasoning model
             raw_text = message.content or getattr(message, "reasoning_content", "") or ""
             clean_text = self._clean_json_text(raw_text)
 
-            return response_model.model_validate_json(clean_text)
+            try:
+                return response_model.model_validate_json(clean_text)
+            except (json.JSONDecodeError, ValidationError):
+                # Kích hoạt cơ chế tự động sửa lỗi JSON bị cắt cụt
+                repaired_text = self._repair_truncated_json(raw_text)
+                if repaired_text != clean_text:
+                    try:
+                        return response_model.model_validate_json(repaired_text)
+                    except (json.JSONDecodeError, ValidationError):
+                        pass
+                raise
         except (json.JSONDecodeError, ValidationError) as e:
             logger.error(f"Không thể parse dữ liệu từ LLM: {e}. Raw content: {raw_text}")
             raise LLMParseError(f"Không thể parse JSON sang {response_model.__name__}: {str(e)}") from e

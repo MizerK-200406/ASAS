@@ -122,3 +122,49 @@ async def test_structured_output_invalid_json_raises_error(dummy_settings):
                 messages=messages,
                 response_model=SampleSchema,
             )
+
+
+class QuizQuestionItem(BaseModel):
+    q: str
+    ans: str
+
+
+class QuizSampleSchema(BaseModel):
+    title: str
+    questions: list[QuizQuestionItem]
+
+
+@pytest.mark.asyncio
+async def test_structured_output_repairs_truncated_json_array(dummy_settings):
+    """Test that truncated JSON arrays (caused by hitting token limit) are automatically repaired."""
+    client = LLMClient(settings=dummy_settings)
+
+    mock_response = MagicMock()
+    mock_choice = MagicMock()
+    # Incomplete JSON cut off mid-second question
+    mock_choice.message.content = (
+        '{\n'
+        '  "title": "Git Flow Quiz",\n'
+        '  "questions": [\n'
+        '    {"q": "What is main branch?", "ans": "Production code"},\n'
+        '    {"q": "What is develop branch?", "ans": "Integration '
+    )
+    mock_choice.finish_reason = "length"
+    mock_response.choices = [mock_choice]
+
+    with patch.object(
+        client.client.chat.completions, "create", new_callable=AsyncMock
+    ) as mock_create:
+        mock_create.return_value = mock_response
+
+        messages = [{"role": "user", "content": "Tạo quiz"}]
+        result = await client.structured_output(
+            messages=messages,
+            response_model=QuizSampleSchema,
+        )
+
+        assert isinstance(result, QuizSampleSchema)
+        assert result.title == "Git Flow Quiz"
+        assert len(result.questions) == 1
+        assert result.questions[0].q == "What is main branch?"
+        assert result.questions[0].ans == "Production code"

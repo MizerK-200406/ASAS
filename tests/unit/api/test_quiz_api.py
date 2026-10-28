@@ -5,6 +5,7 @@ from fastapi.testclient import TestClient
 
 from asas.api.app import create_app
 from asas.api.deps import get_memory_service, get_quiz_service
+from asas.core.llm_client import LLMParseError
 from asas.modules.memory.service import MemoryService
 from asas.modules.quiz.service import QuizService
 from asas.modules.quiz.schemas import (
@@ -95,6 +96,19 @@ def test_generate_quiz_validation_error(client):
         },
     )
     assert response.status_code == 422
+
+
+def test_generate_quiz_llm_parse_error(client, mock_quiz_service):
+    mock_quiz_service.generate_quiz.side_effect = LLMParseError("EOF while parsing a list")
+    response = client.post(
+        "/api/v1/quiz/generate",
+        json={
+            "topic": "Git flow",
+            "num_questions": 5,
+        },
+    )
+    assert response.status_code == 502
+    assert "Mô hình AI phản hồi dữ liệu không chuẩn" in response.json()["detail"]
 
 
 def test_grade_quiz_anonymous(client):

@@ -2,6 +2,7 @@ from typing import Any, Dict, List, Optional
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, Field
 
+from asas.core.llm_client import LLMClientError, LLMParseError
 from asas.api.deps import get_memory_service, get_quiz_service
 from asas.modules.memory.service import MemoryService
 from asas.modules.quiz.schemas import (
@@ -48,6 +49,16 @@ async def generate_quiz(
 ) -> Quiz:
     try:
         return await quiz_service.generate_quiz(request)
+    except LLMParseError as e:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=f"Mô hình AI phản hồi dữ liệu không chuẩn hoặc chạm giới hạn token: {str(e)}. Hãy thử lại hoặc giảm số lượng câu hỏi.",
+        )
+    except LLMClientError as e:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=f"Dịch vụ AI hiện không khả dụng: {str(e)}",
+        )
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
