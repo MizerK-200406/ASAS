@@ -6,8 +6,32 @@ Nền tảng Đánh giá & Hỗ trợ Học tập Cá nhân hóa sử dụng ki�
 - **100% Free Tech Stack**: Vận hành hiệu quả với chi phí tối ưu.
 
 ## Tech Stack
-- **Python**: 3.12+
+- **Python**: 3.12+ (Quản lý qua `uv`)
+- **Package Manager**: [uv](https://github.com/astral-sh/uv) (Cực nhanh, hỗ trợ PEP 621 & lockfile)
 - **LLM Provider**: NVIDIA NIM API (OpenAI-compatible)
 - **Model**: deepseek-ai/deepseek-v4-flash
-- **Framework**: FastAPI, Pydantic v2
+- **Framework**: FastAPI, Pydantic v2, aiosqlite
 - **Testing**: Pytest (TDD workflow)
+
+## Cài đặt & Sử dụng với `uv`
+
+### 1. Đồng bộ môi trường (Sync dependencies)
+```bash
+uv sync
+```
+
+### 2. Chạy Kiểm thử (Unit Tests)
+```bash
+uv run pytest
+```
+
+### 3. Khởi chạy RESTful API Server
+```bash
+uv run uvicorn asas.api.app:app --reload --port 8000
+```
+Truy cập Swagger Docs tại: `http://localhost:8000/docs`
+
+### 4. Khởi chạy Giao diện Dòng lệnh (CLI Playground)
+```bash
+uv run python playground.py
+```
