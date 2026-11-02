@@ -125,7 +125,7 @@ async def main():
     grade_badge = f"[{student_profile.grade_level}]" if student_profile.grade_level else ""
     school_badge = f"- {student_profile.school}" if student_profile.school else ""
     print(f"\n👋 Đã đăng nhập: {student_profile.name} {grade_badge} {school_badge} (Mã ID: {student_profile.student_id})")
-    print("✨ Hệ thống Hồ sơ cá nhân hóa, Bộ nhớ & Spaced Repetition đã sẵn sàng.\n")
+    print("✨ Hệ thống Hồ sơ cá nhân hóa & Bộ nhớ đã sẵn sàng.\n")
 
     while True:
         print("\n--- MENU TRẢI NGHIỆM AI STUDY ASSISTANT ---")
@@ -239,9 +239,9 @@ async def main():
                     print(f"✅ Mặt sau: {card.back}")
                     print(f"🏷️  Tags: {', '.join(card.tags)}")
 
-                # Tự động nạp thẻ vào hệ thống ôn tập SM-2
+                # Tự động nạp thẻ vào hệ thống CSDL
                 await memory_service.import_flashcard_set(student_id=student_id, card_set=flashcards)
-                print(f"\n💾 [Memory] Đã lưu {len(flashcards.cards)} thẻ vào hệ thống ôn tập ngắt quãng (SM-2) của bạn!")
+                print(f"\n💾 [Memory] Đã lưu {len(flashcards.cards)} thẻ vào hồ sơ của bạn!")
 
             except Exception as e:
                 print(f"❌ Lỗi khi tạo Flashcards: {e}")

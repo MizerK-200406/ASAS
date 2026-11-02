@@ -27,7 +27,7 @@ def test_openapi_documentation_schema():
     assert "/api/v1/quiz/generate" in paths
     assert "/api/v1/quiz/grade" in paths
     assert "/api/v1/flashcards/generate" in paths
-    assert "/api/v1/flashcards/due" in paths
-    assert "/api/v1/flashcards/review" in paths
+    assert "/api/v1/flashcards/import" in paths
+    assert "/api/v1/flashcards/student/{student_id}" in paths
     assert "/api/v1/chat/message" in paths
     assert "/api/v1/chat/sessions/{session_id}" in paths

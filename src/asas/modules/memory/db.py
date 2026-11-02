@@ -37,11 +37,7 @@ CREATE TABLE IF NOT EXISTS flashcard_progress (
     student_id TEXT NOT NULL,
     front TEXT NOT NULL,
     back TEXT NOT NULL,
-    repetition INTEGER NOT NULL DEFAULT 0,
-    interval_days INTEGER NOT NULL DEFAULT 1,
-    ease_factor REAL NOT NULL DEFAULT 2.5,
-    next_review TEXT NOT NULL,
-    last_reviewed TEXT,
+    created_at TEXT NOT NULL,
     FOREIGN KEY (student_id) REFERENCES students(student_id) ON DELETE CASCADE
 );
 
@@ -55,7 +51,7 @@ CREATE TABLE IF NOT EXISTS student_activity_logs (
 );
 
 CREATE INDEX IF NOT EXISTS idx_quiz_student ON quiz_records(student_id);
-CREATE INDEX IF NOT EXISTS idx_flashcard_student_next_review ON flashcard_progress(student_id, next_review);
+CREATE INDEX IF NOT EXISTS idx_flashcard_student ON flashcard_progress(student_id);
 CREATE INDEX IF NOT EXISTS idx_activity_student ON student_activity_logs(student_id);
 """
 

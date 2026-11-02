@@ -1,4 +1,4 @@
-"""Pydantic schemas for memory management, student profile, and SM-2 spaced repetition."""
+"""Pydantic schemas for memory management, student profile, and flashcards."""
 
 from datetime import datetime, timezone
 from enum import Enum
@@ -57,7 +57,6 @@ class QuizRecord(BaseModel):
     completed_at: datetime = Field(default_factory=utc_now)
 
 
-
 class StudentActivityLog(BaseModel):
     """Nhật ký hoạt động của học sinh (làm quiz, ôn flashcard, chat trợ lý, dùng tools)."""
 
@@ -89,35 +88,11 @@ class ChatMessageRecord(BaseModel):
     created_at: datetime = Field(default_factory=utc_now)
 
 
-
-
 class FlashcardProgress(BaseModel):
-    """Trạng thái học tập và hẹn lịch ôn tập của một Flashcard theo thuật toán SM-2."""
+    """Trạng thái lưu trữ của một Flashcard trong CSDL của học sinh."""
 
     card_id: str
     student_id: str
     front: str
     back: str
-    repetition: int = 0
-    interval_days: int = 1
-    ease_factor: float = 2.5
-    next_review: datetime = Field(default_factory=utc_now)
-    last_reviewed: Optional[datetime] = None
-
-
-class SM2ReviewInput(BaseModel):
-    """Dữ liệu đầu vào để tính toán thuật toán SuperMemo SM-2 sau mỗi lần lật thẻ."""
-
-    quality: int = Field(ge=0, le=5, description="Chất lượng nhớ từ 0 (quên sạch) đến 5 (nhớ hoàn hảo)")
-    repetition: int = Field(ge=0, default=0, description="Số lần ôn tập thành công liên tiếp")
-    interval_days: int = Field(ge=1, default=1, description="Khoảng cách ngày ôn tập hiện tại")
-    ease_factor: float = Field(ge=1.3, default=2.5, description="Hệ số độ dễ (tối thiểu 1.3)")
-
-
-class SM2ReviewResult(BaseModel):
-    """Kết quả tính toán sau khi áp dụng thuật toán SuperMemo SM-2."""
-
-    repetition: int
-    interval_days: int
-    ease_factor: float
-    next_review: datetime
+    created_at: datetime = Field(default_factory=utc_now)

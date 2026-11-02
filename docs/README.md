@@ -33,7 +33,7 @@ Start-Process "docs\diagrams\asas_architecture.html"
 ```text
 ASAS/
 ├── data/                            # Lưu trữ cơ sở dữ liệu SQLite kép (Dual DB)
-│   ├── users.db                     # Dữ liệu thực thể: học sinh, kết quả quiz, tiến độ SM-2, nhật ký
+│   ├── users.db                     # Dữ liệu thực thể: học sinh, kết quả quiz, flashcards, nhật ký
 │   └── chats.db                     # Dữ liệu sự kiện: phiên hội thoại và lịch sử tin nhắn
 ├── docs/                            # Thư mục tài liệu kỹ thuật
 │   ├── README.md                    # Tài liệu tổng quan kiến trúc & hướng dẫn sơ đồ
@@ -45,7 +45,7 @@ ASAS/
 │   └── modules/
 │       ├── agents/                  # Hệ thống Đa tác tử (Supervisor, Tutor, Evaluator, Planner, Orchestrator)
 │       ├── quiz/                    # Dịch vụ sinh đề và chấm điểm câu hỏi trắc nghiệm
-│       ├── flashcard/               # Dịch vụ sinh bộ thẻ ghi nhớ thuật toán SM-2
+│       ├── flashcard/               # Dịch vụ sinh bộ thẻ ghi nhớ Flashcards
 │       ├── memory/                  # Tầng lưu trữ CSDL kép, Session Memory, Kho lưu trữ DAO
 │       └── tools/                   # Rào chắn bảo mật: Python Sandbox & DuckDuckGo Search có kiểm duyệt
 ├── tests/                           # Kiểm thử tự động (Phản chiếu 1:1 với src/)
@@ -55,7 +55,7 @@ ASAS/
 │   │   │   ├── agents/              # Kiểm thử hành vi và định tuyến của các tác tử
 │   │   │   ├── quiz/                # Kiểm thử sinh đề, chấm bài và schemas Quiz
 │   │   │   ├── flashcard/           # Kiểm thử tạo thẻ và schemas Flashcard
-│   │   │   ├── memory/              # Kiểm thử CSDL kép, thuật toán SM-2, DAO repository
+│   │   │   ├── memory/              # Kiểm thử CSDL kép, DAO repository
 │   │   │   └── tools/               # Kiểm thử sandbox, web search, tool registry
 │   │   └── diagrams/                # Kiểm thử tính toàn vẹn của sơ đồ Archify
 ├── playground.py                    # Giao diện trải nghiệm CLI (Quiz, Flashcard, Trợ lý AI, Hồ sơ)

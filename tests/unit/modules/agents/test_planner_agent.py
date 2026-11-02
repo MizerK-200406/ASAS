@@ -37,7 +37,7 @@ def mock_memory_service():
             ],
         }
     )
-    service.get_due_flashcards = AsyncMock(
+    service.get_student_flashcards = AsyncMock(
         return_value=[
             FlashcardProgress(card_id="c1", student_id="st_01", front="Công thức đạo hàm", back="f'(x)"),
         ]
@@ -76,7 +76,7 @@ async def test_planner_agent_run_with_memory_context(mock_llm_client, mock_memor
     assert response.agent_role == AgentRole.PLANNER
     assert response.metadata["has_memory_context"] is True
     assert mock_memory_service.get_student_summary.called
-    assert mock_memory_service.get_due_flashcards.called
+    assert mock_memory_service.get_student_flashcards.called
 
     # Kiểm tra ngữ cảnh gửi tới LLM có chứa dữ liệu thực tế của học sinh
     called_messages = mock_llm_client.chat_completion.call_args.kwargs["messages"]
@@ -111,7 +111,7 @@ async def test_planner_agent_includes_ai_critique_and_goals(mock_llm_client):
             ],
         }
     )
-    service.get_due_flashcards = AsyncMock(return_value=[])
+    service.get_student_flashcards = AsyncMock(return_value=[])
     planner = PlannerAgent(llm_client=mock_llm_client, memory_service=service)
     await planner.run(messages=[{"role": "user", "content": "Lên lịch ôn tập"}], student_id="st_01")
 

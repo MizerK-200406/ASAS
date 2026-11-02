@@ -11,7 +11,6 @@ from asas.modules.memory.schemas import (
     ChatSessionRecord,
     FlashcardProgress,
     QuizRecord,
-    SM2ReviewResult,
     StudentActivityLog,
     StudentProfile,
     utc_now,
@@ -271,124 +270,30 @@ class MemoryRepository:
                 }
 
     # -------------------------------------------------------------
-    # 3. Flashcard Progress & Spaced Repetition
+    # 3. Flashcard Storage
     # -------------------------------------------------------------
 
     async def save_flashcard_progress(self, card: FlashcardProgress) -> FlashcardProgress:
-        """Lưu hoặc cập nhật tiến độ học của một Flashcard."""
+        """Lưu hoặc cập nhật thông tin của một Flashcard."""
         async with get_db_connection(self.db_path) as db:
             await db.execute(
                 """INSERT INTO flashcard_progress
-                   (card_id, student_id, front, back, repetition, interval_days, ease_factor, next_review, last_reviewed)
-                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                   (card_id, student_id, front, back, created_at)
+                   VALUES (?, ?, ?, ?, ?)
                    ON CONFLICT(card_id) DO UPDATE SET
                        front=excluded.front,
                        back=excluded.back,
-                       repetition=excluded.repetition,
-                       interval_days=excluded.interval_days,
-                       ease_factor=excluded.ease_factor,
-                       next_review=excluded.next_review,
-                       last_reviewed=excluded.last_reviewed""",
+                       created_at=excluded.created_at""",
                 (
                     card.card_id,
                     card.student_id,
                     card.front,
                     card.back,
-                    card.repetition,
-                    card.interval_days,
-                    card.ease_factor,
-                    card.next_review.isoformat(),
-                    card.last_reviewed.isoformat() if card.last_reviewed else None,
+                    card.created_at.isoformat(),
                 ),
             )
             await db.commit()
             return card
-
-    async def get_due_flashcards(
-        self,
-        student_id: str,
-        current_time: Optional[datetime] = None,
-        limit: int = 20,
-    ) -> List[FlashcardProgress]:
-        """Lọc ra các Flashcard đã đến hạn hoặc quá hạn ôn tập tại thời điểm `current_time`."""
-        if current_time is None:
-            current_time = utc_now()
-        iso_time = current_time.isoformat()
-
-        async with get_db_connection(self.db_path) as db:
-            db.row_factory = aiosqlite.Row
-            async with db.execute(
-                """SELECT * FROM flashcard_progress
-                   WHERE student_id = ? AND next_review <= ?
-                   ORDER BY next_review ASC
-                   LIMIT ?""",
-                (student_id, iso_time, limit),
-            ) as cursor:
-                rows = await cursor.fetchall()
-                return [
-                    FlashcardProgress(
-                        card_id=row["card_id"],
-                        student_id=row["student_id"],
-                        front=row["front"],
-                        back=row["back"],
-                        repetition=row["repetition"],
-                        interval_days=row["interval_days"],
-                        ease_factor=row["ease_factor"],
-                        next_review=datetime.fromisoformat(row["next_review"]),
-                        last_reviewed=(
-                            datetime.fromisoformat(row["last_reviewed"])
-                            if row["last_reviewed"]
-                            else None
-                        ),
-                    )
-                    for row in rows
-                ]
-
-    async def update_flashcard_review(
-        self,
-        card_id: str,
-        sm2_result: SM2ReviewResult,
-        review_time: datetime,
-    ) -> Optional[FlashcardProgress]:
-        """Cập nhật trạng thái của Flashcard sau khi học sinh trả lời theo kết quả SM-2."""
-        async with get_db_connection(self.db_path) as db:
-            await db.execute(
-                """UPDATE flashcard_progress
-                   SET repetition = ?, interval_days = ?, ease_factor = ?, next_review = ?, last_reviewed = ?
-                   WHERE card_id = ?""",
-                (
-                    sm2_result.repetition,
-                    sm2_result.interval_days,
-                    sm2_result.ease_factor,
-                    sm2_result.next_review.isoformat(),
-                    review_time.isoformat(),
-                    card_id,
-                ),
-            )
-            await db.commit()
-
-            db.row_factory = aiosqlite.Row
-            async with db.execute(
-                "SELECT * FROM flashcard_progress WHERE card_id = ?", (card_id,)
-            ) as cursor:
-                row = await cursor.fetchone()
-                if not row:
-                    return None
-                return FlashcardProgress(
-                    card_id=row["card_id"],
-                    student_id=row["student_id"],
-                    front=row["front"],
-                    back=row["back"],
-                    repetition=row["repetition"],
-                    interval_days=row["interval_days"],
-                    ease_factor=row["ease_factor"],
-                    next_review=datetime.fromisoformat(row["next_review"]),
-                    last_reviewed=(
-                        datetime.fromisoformat(row["last_reviewed"])
-                        if row["last_reviewed"]
-                        else None
-                    ),
-                )
 
     async def get_flashcard(self, card_id: str) -> Optional[FlashcardProgress]:
         """Lấy thông tin chi tiết một Flashcard theo card_id."""
@@ -405,16 +310,35 @@ class MemoryRepository:
                     student_id=row["student_id"],
                     front=row["front"],
                     back=row["back"],
-                    repetition=row["repetition"],
-                    interval_days=row["interval_days"],
-                    ease_factor=row["ease_factor"],
-                    next_review=datetime.fromisoformat(row["next_review"]),
-                    last_reviewed=(
-                        datetime.fromisoformat(row["last_reviewed"])
-                        if row["last_reviewed"]
-                        else None
-                    ),
+                    created_at=datetime.fromisoformat(row["created_at"]),
                 )
+
+    async def get_student_flashcards(
+        self,
+        student_id: str,
+        limit: int = 50,
+    ) -> List[FlashcardProgress]:
+        """Lấy danh sách các thẻ Flashcard của học sinh."""
+        async with get_db_connection(self.db_path) as db:
+            db.row_factory = aiosqlite.Row
+            async with db.execute(
+                """SELECT * FROM flashcard_progress
+                   WHERE student_id = ?
+                   ORDER BY created_at DESC
+                   LIMIT ?""",
+                (student_id, limit),
+            ) as cursor:
+                rows = await cursor.fetchall()
+                return [
+                    FlashcardProgress(
+                        card_id=row["card_id"],
+                        student_id=row["student_id"],
+                        front=row["front"],
+                        back=row["back"],
+                        created_at=datetime.fromisoformat(row["created_at"]),
+                    )
+                    for row in rows
+                ]
 
     # -------------------------------------------------------------
     # 4. Student Activity Logs

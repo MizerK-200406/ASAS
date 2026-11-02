@@ -3,7 +3,7 @@
 from datetime import datetime, timedelta, timezone
 import pytest
 from asas.modules.memory.repository import MemoryRepository
-from asas.modules.memory.schemas import FlashcardProgress, QuizRecord, SM2ReviewResult
+from asas.modules.memory.schemas import FlashcardProgress, QuizRecord
 
 
 @pytest.fixture
@@ -77,57 +77,38 @@ async def test_quiz_record_and_statistics(repo):
 
 
 @pytest.mark.asyncio
-async def test_flashcard_progress_and_due_cards(repo):
-    """Kiểm tra lưu flashcard và lọc các thẻ đến hạn ôn tập (Due Cards)."""
+async def test_flashcard_progress_and_retrieval(repo):
+    """Kiểm tra lưu flashcard và lấy danh sách thẻ của học sinh."""
     await repo.initialize()
     await repo.get_or_create_student("student_01", "Nguyen Van A")
 
-    now = datetime(2026, 10, 22, 12, 0, 0, tzinfo=timezone.utc)
-    past_due = now - timedelta(hours=2)
-    future_due = now + timedelta(days=2)
-
-    card_due = FlashcardProgress(
+    card_1 = FlashcardProgress(
         card_id="card_1",
         student_id="student_01",
         front="1 + 1",
         back="2",
-        next_review=past_due,
     )
-    card_future = FlashcardProgress(
+    card_2 = FlashcardProgress(
         card_id="card_2",
         student_id="student_01",
         front="2 + 2",
         back="4",
-        next_review=future_due,
     )
 
-    await repo.save_flashcard_progress(card_due)
-    await repo.save_flashcard_progress(card_future)
+    await repo.save_flashcard_progress(card_1)
+    await repo.save_flashcard_progress(card_2)
 
-    # Lọc thẻ đến hạn tại thời điểm `now` -> Chỉ được có card_1
-    due_cards = await repo.get_due_flashcards("student_01", current_time=now)
-    assert len(due_cards) == 1
-    assert due_cards[0].card_id == "card_1"
+    # Lấy thẻ theo card_id
+    card = await repo.get_flashcard("card_1")
+    assert card is not None
+    assert card.front == "1 + 1"
+    assert card.back == "2"
 
-    # Cập nhật kết quả ôn tập SM-2 cho card_1
-    sm2_result = SM2ReviewResult(
-        repetition=1,
-        interval_days=1,
-        ease_factor=2.5,
-        next_review=now + timedelta(days=1),
-    )
-    updated_card = await repo.update_flashcard_review(
-        card_id="card_1",
-        sm2_result=sm2_result,
-        review_time=now,
-    )
-    assert updated_card is not None
-    assert updated_card.repetition == 1
-    assert updated_card.last_reviewed == now
-
-    # Sau khi cập nhật, card_1 không còn nằm trong danh sách đến hạn tại thời điểm `now`
-    due_cards_after = await repo.get_due_flashcards("student_01", current_time=now)
-    assert len(due_cards_after) == 0
+    # Lấy danh sách thẻ của học sinh
+    cards = await repo.get_student_flashcards("student_01")
+    assert len(cards) == 2
+    card_ids = {c.card_id for c in cards}
+    assert card_ids == {"card_1", "card_2"}
 
 
 @pytest.mark.asyncio

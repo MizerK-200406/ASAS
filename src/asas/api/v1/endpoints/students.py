@@ -75,7 +75,7 @@ async def get_student_activities(
     limit: int = Query(default=50, ge=1, le=200, description="Số lượng bản ghi tối đa"),
     memory_service: MemoryService = Depends(get_memory_service),
 ) -> List[StudentActivityLog]:
-    """Lấy dòng sự kiện hoạt động hợp nhất của học sinh (Quiz, SM-2, Chat)."""
+    """Lấy dòng sự kiện hoạt động hợp nhất của học sinh (Quiz, Flashcard, Chat)."""
     return await memory_service.get_student_activity_logs(student_id=student_id, limit=limit)
 
 

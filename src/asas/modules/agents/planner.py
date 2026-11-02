@@ -49,7 +49,7 @@ class PlannerAgent:
         if self.memory_service and student_id:
             try:
                 summary = await self.memory_service.get_student_summary(student_id)
-                due_cards = await self.memory_service.get_due_flashcards(student_id)
+                flashcards = await self.memory_service.get_student_flashcards(student_id)
                 profile = summary["profile"]
                 stats = summary["quiz_stats"]
                 recent = summary["recent_quizzes"]
@@ -80,7 +80,7 @@ class PlannerAgent:
                     f"{profile_text}\n"
                     f"- Thống kê Quiz: Tổng {stats['total_quizzes']} bài, Điểm trung bình: {stats['average_score']}%\n"
                     f"- Các bài Quiz gần nhất:\n{recent_text}\n"
-                    f"- Số thẻ Flashcard đến hạn ôn hôm nay: {len(due_cards)} thẻ."
+                    f"- Số thẻ Flashcard đã lưu trong hồ sơ: {len(flashcards)} thẻ."
                 )
                 has_memory_context = True
             except Exception:

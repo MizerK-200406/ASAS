@@ -1,4 +1,4 @@
-"""Unit tests for MemoryService orchestrating session memory, repository, and SM-2."""
+"""Unit tests for MemoryService orchestrating session memory, repository, and flashcards."""
 
 import pytest
 from asas.modules.flashcard.schemas import FlashcardItem, FlashcardSet
@@ -49,8 +49,8 @@ async def test_quiz_and_student_summary(memory_service):
 
 
 @pytest.mark.asyncio
-async def test_flashcard_sm2_review_flow(memory_service):
-    """Kiểm tra chu trình nạp Flashcard từ FlashcardSet và ôn tập theo SM-2."""
+async def test_flashcard_import_and_retrieval(memory_service):
+    """Kiểm tra chu trình nạp Flashcard từ FlashcardSet và truy xuất danh sách thẻ."""
     await memory_service.initialize()
     await memory_service.get_or_create_student("st_01", "Trần Văn B")
 
@@ -65,19 +65,10 @@ async def test_flashcard_sm2_review_flow(memory_service):
     saved_cards = await memory_service.import_flashcard_set("st_01", card_set)
     assert len(saved_cards) == 2
 
-    # Lấy các thẻ cần ôn tập ngay
-    due_cards = await memory_service.get_due_flashcards("st_01")
-    assert len(due_cards) == 2
-
-    # Học sinh ôn thẻ đầu tiên và đánh giá quality = 5 (nhớ hoàn hảo)
-    card_to_review = due_cards[0]
-    updated_card = await memory_service.review_flashcard(
-        card_id=card_to_review.card_id,
-        quality=5,
-    )
-    assert updated_card.repetition == 1
-    assert updated_card.interval_days == 1
-    assert updated_card.ease_factor > 2.5
+    # Lấy danh sách thẻ của học sinh
+    student_cards = await memory_service.get_student_flashcards("st_01")
+    assert len(student_cards) == 2
+    assert {c.front for c in student_cards} == {"CPU là gì?", "RAM là gì?"}
 
 
 @pytest.mark.asyncio

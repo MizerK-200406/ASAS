@@ -1,4 +1,4 @@
-"""MemoryService orchestrating conversational session memory, SQLite persistence, and SM-2 spaced repetition."""
+"""MemoryService orchestrating conversational session memory, SQLite persistence, and flashcard management."""
 
 from datetime import datetime
 from typing import Any, Dict, List, Optional
@@ -12,13 +12,11 @@ from asas.modules.memory.schemas import (
     ChatSessionRecord,
     FlashcardProgress,
     QuizRecord,
-    SM2ReviewInput,
     StudentActivityLog,
     StudentProfile,
     utc_now,
 )
 from asas.modules.memory.session import SessionMemory
-from asas.modules.memory.sm2 import calculate_sm2
 
 
 class MemoryService:
@@ -157,7 +155,7 @@ class MemoryService:
         }
 
     # -------------------------------------------------------------
-    # 3. Quản lý Flashcard & Ôn tập Spaced Repetition (SM-2)
+    # 3. Quản lý Flashcard
     # -------------------------------------------------------------
 
     async def import_flashcard_set(
@@ -165,7 +163,7 @@ class MemoryService:
         student_id: str,
         card_set: FlashcardSet,
     ) -> List[FlashcardProgress]:
-        """Nạp toàn bộ thẻ từ một FlashcardSet vào hệ thống hẹn lịch SM-2."""
+        """Nạp toàn bộ thẻ từ một FlashcardSet vào CSDL của học sinh."""
         saved_cards: List[FlashcardProgress] = []
         for card_item in card_set.cards:
             card_id = f"card_{uuid.uuid4().hex[:8]}"
@@ -188,58 +186,20 @@ class MemoryService:
         )
         return saved_cards
 
-    async def get_due_flashcards(
+    async def get_student_flashcards(
         self,
         student_id: str,
-        current_time: Optional[datetime] = None,
-        limit: int = 20,
+        limit: int = 50,
     ) -> List[FlashcardProgress]:
-        """Lấy danh sách các thẻ cần ôn tập hôm nay."""
-        return await self.repository.get_due_flashcards(
+        """Lấy danh sách các thẻ Flashcard của học sinh."""
+        return await self.repository.get_student_flashcards(
             student_id=student_id,
-            current_time=current_time,
             limit=limit,
         )
 
-    async def review_flashcard(
-        self,
-        card_id: str,
-        quality: int,
-        review_time: Optional[datetime] = None,
-    ) -> FlashcardProgress:
-        """Ghi nhận đánh giá của học sinh (quality 0..5) và tính toán lịch ôn tập mới bằng SM-2."""
-        if review_time is None:
-            review_time = utc_now()
-
-        card = await self.repository.get_flashcard(card_id)
-        if not card:
-            raise ValueError(f"Không tìm thấy thẻ Flashcard với mã: {card_id}")
-
-        sm2_input = SM2ReviewInput(
-            quality=quality,
-            repetition=card.repetition,
-            interval_days=card.interval_days,
-            ease_factor=card.ease_factor,
-        )
-        sm2_result = calculate_sm2(sm2_input, review_datetime=review_time)
-
-        updated_card = await self.repository.update_flashcard_review(
-            card_id=card_id,
-            sm2_result=sm2_result,
-            review_time=review_time,
-        )
-        if not updated_card:
-            raise RuntimeError(f"Lỗi không thể cập nhật Flashcard: {card_id}")
-
-        # Tự động ghi nhật ký hoạt động
-        front_snippet = card.front[:25] + "..." if len(card.front) > 25 else card.front
-        await self.repository.log_student_activity(
-            student_id=card.student_id,
-            action_type="FLASHCARD_REVIEWED",
-            description=f"Ôn tập thẻ '{front_snippet}' (Đánh giá: {quality}/5)",
-        )
-
-        return updated_card
+    async def get_flashcard(self, card_id: str) -> Optional[FlashcardProgress]:
+        """Lấy thông tin chi tiết một Flashcard theo card_id."""
+        return await self.repository.get_flashcard(card_id)
 
     # -------------------------------------------------------------
     # 4. Quản lý Nhật ký hoạt động (Activity Logs)

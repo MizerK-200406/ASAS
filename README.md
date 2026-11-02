@@ -1,6 +1,6 @@
 # ASAS - AI Study Assistant System
 
-Trợ lý học tập thông minh sử dụng kiến trúc AI Engineering hiện đại, hỗ trợ học tập theo phương pháp Socratic, tạo Quiz, Flashcard và Spaced Repetition (100% Free Tech Stack).
+Trợ lý học tập thông minh sử dụng kiến trúc AI Engineering hiện đại, hỗ trợ học tập theo phương pháp Socratic, tạo Quiz và Flashcard (100% Free Tech Stack).
 
 ## Tech Stack
 - **Python**: 3.12+
