@@ -85,6 +85,8 @@ async def test_quiz_record_and_statistics(repo):
     assert stats["total_quizzes"] == 2
     assert stats["average_score"] == 90.0
     assert stats["highest_score"] == 100.0
+    assert stats["total_correct"] == 9
+    assert stats["total_questions"] == 10
 
 
 @pytest.mark.asyncio

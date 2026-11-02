@@ -255,7 +255,7 @@ async def main():
             print("\n📈 THỐNG KÊ KẾT QUẢ HỌC TẬP:")
             print(f"- Tổng số bài Quiz đã làm: {stats['total_quizzes']}")
             print(f"- Điểm trung bình: {stats['average_score']}%")
-            print(f"- Tổng số câu làm đúng: {stats['total_correct']}/{stats['total_questions']}")
+            print(f"- Tổng số câu làm đúng: {stats.get('total_correct', 0)}/{stats.get('total_questions', 0)}")
 
             print("\n🕒 DÒNG THỜI GIAN HOẠT ĐỘNG GẦN NHẤT:")
             if not activities:

@@ -247,7 +247,9 @@ class MemoryRepository:
                 SELECT 
                     COUNT(*) AS total_quizzes,
                     AVG(score_percentage) AS average_score,
-                    MAX(score_percentage) AS highest_score
+                    MAX(score_percentage) AS highest_score,
+                    COALESCE(SUM(correct_count), 0) AS total_correct,
+                    COALESCE(SUM(total_questions), 0) AS total_questions
                 FROM quiz_records
                 WHERE student_id = $1
                 """,
@@ -258,6 +260,8 @@ class MemoryRepository:
                     "total_quizzes": 0,
                     "average_score": 0.0,
                     "highest_score": 0.0,
+                    "total_correct": 0,
+                    "total_questions": 0,
                     "recent_quizzes": [],
                 }
 
@@ -266,6 +270,8 @@ class MemoryRepository:
                 "total_quizzes": int(row["total_quizzes"]),
                 "average_score": round(float(row["average_score"]), 2) if row["average_score"] is not None else 0.0,
                 "highest_score": round(float(row["highest_score"]), 2) if row["highest_score"] is not None else 0.0,
+                "total_correct": int(row["total_correct"]),
+                "total_questions": int(row["total_questions"]),
                 "recent_quizzes": recent_records,
             }
 
