@@ -15,10 +15,10 @@ from asas.api.v1.router import api_v1_router
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     """Lifespan context manager to initialize and cleanup resources."""
-    logger.info("Khởi động FastAPI server ASAS...")
+    logger.info("Khởi động FastAPI server ASAS với PostgreSQL...")
 
-    # Khởi tạo MemoryService
-    memory_service = MemoryService(user_db_path="data/users.db")
+    # Khởi tạo MemoryService kết nối PostgreSQL
+    memory_service = MemoryService()
     await memory_service.initialize()
     app.state.memory_service = memory_service
 
@@ -31,7 +31,9 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     logger.info("FastAPI server ASAS đã sẵn sàng!")
     yield
 
-    logger.info("Đang tắt FastAPI server ASAS...")
+    logger.info("Đang tắt FastAPI server ASAS và giải phóng connection pool...")
+    from asas.modules.memory.db import DatabasePool
+    await DatabasePool.close_all()
 
 
 def create_app() -> FastAPI:

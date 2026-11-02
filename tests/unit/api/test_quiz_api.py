@@ -5,8 +5,10 @@ from fastapi.testclient import TestClient
 
 from asas.api.app import create_app
 from asas.api.deps import get_memory_service, get_quiz_service
+from asas.core.config import get_settings
 from asas.core.llm_client import LLMParseError
 from asas.modules.agents.schemas import EvaluationResult
+from asas.modules.memory.db import get_db_connection
 from asas.modules.memory.service import MemoryService
 from asas.modules.quiz.service import QuizService
 from asas.modules.quiz.schemas import (
@@ -19,10 +21,16 @@ from asas.modules.quiz.schemas import (
 
 
 @pytest.fixture
-def memory_service(tmp_path):
-    user_db = str(tmp_path / "test_quiz_users.db")
-    service = MemoryService(user_db_path=user_db)
-    asyncio.run(service.initialize())
+def memory_service():
+    settings = get_settings()
+    service = MemoryService(db_url=settings.test_database_url)
+
+    async def _setup():
+        await service.initialize()
+        async with get_db_connection(settings.test_database_url) as conn:
+            await conn.execute("TRUNCATE TABLE chat_messages, chat_sessions, student_activity_logs, quiz_records, students CASCADE;")
+
+    asyncio.run(_setup())
     return service
 
 

@@ -14,9 +14,11 @@ class Settings(BaseSettings):
 
     nvidia_api_key: str
     nvidia_base_url: str = "https://integrate.api.nvidia.com/v1"
-    default_model: str = "deepseek-ai/deepseek-v4-flash"
+    default_model: str = "deepseek-ai/deepseek-v4.1-flash"
     app_env: Literal["development", "production", "testing"] = "development"
     log_level: str = "INFO"
+    database_url: str = "postgresql://postgres:8ijb9okn0plm@localhost:5432/asas_db"
+    test_database_url: str = "postgresql://postgres:8ijb9okn0plm@localhost:5432/asas_test_db"
 
 
 @lru_cache()

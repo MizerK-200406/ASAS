@@ -43,7 +43,7 @@ async def main():
     quiz_service = QuizService(llm_client=llm_client, evaluator_agent=evaluator_agent)
 
     # Khởi tạo Memory Service
-    memory_service = MemoryService(user_db_path="data/users.db")
+    memory_service = MemoryService()
     await memory_service.initialize()
 
     # -------------------------------------------------------------
@@ -118,7 +118,7 @@ async def main():
         print("--- MENU CHỨC NĂNG HỆ THỐNG ASAS ---")
         print("=" * 50)
         print("1. Tạo đề trắc nghiệm (Quiz) & Đánh giá lỗ hổng kiến thức với AI Agent")
-        print("2. Xem Hồ sơ & Lịch sử học tập (SQLite Database)")
+        print("2. Xem Hồ sơ & Lịch sử học tập (PostgreSQL Database)")
         print("0. Thoát")
         choice = input("\nChọn chức năng (0/1/2): ").strip()
 
@@ -235,7 +235,7 @@ async def main():
 
         elif choice == "2":
             print("\n" + "=" * 65)
-            print("📊 HỒ SƠ HỌC TẬP & DÒNG THỜI GIAN HOẠT ĐỘNG (SQLITE DATABASE)")
+            print("📊 HỒ SƠ HỌC TẬP & DÒNG THỜI GIAN HOẠT ĐỘNG (POSTGRESQL DATABASE)")
             print("=" * 65)
             summary = await memory_service.get_student_summary(student_id, activity_limit=10)
             profile = summary["profile"]

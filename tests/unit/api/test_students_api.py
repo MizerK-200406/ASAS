@@ -1,18 +1,25 @@
+import asyncio
 import pytest
 from fastapi.testclient import TestClient
+
 from asas.api.app import create_app
 from asas.api.deps import get_memory_service
+from asas.core.config import get_settings
+from asas.modules.memory.db import get_db_connection
 from asas.modules.memory.service import MemoryService
 
 
-import asyncio
-
 @pytest.fixture
-def memory_service_fixture(tmp_path):
-    user_db = str(tmp_path / "test_users.db")
-    chat_db = str(tmp_path / "test_chats.db")
-    service = MemoryService(user_db_path=user_db, chat_db_path=chat_db)
-    asyncio.run(service.initialize())
+def memory_service_fixture():
+    settings = get_settings()
+    service = MemoryService(db_url=settings.test_database_url)
+
+    async def _setup():
+        await service.initialize()
+        async with get_db_connection(settings.test_database_url) as conn:
+            await conn.execute("TRUNCATE TABLE chat_messages, chat_sessions, student_activity_logs, quiz_records, students CASCADE;")
+
+    asyncio.run(_setup())
     return service
 
 

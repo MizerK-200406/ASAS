@@ -1,14 +1,25 @@
 """Unit tests for MemoryService orchestrating session memory and repository."""
 
 import pytest
+import pytest_asyncio
+from asas.core.config import get_settings
+from asas.modules.memory.db import get_db_connection
 from asas.modules.memory.service import MemoryService
 
 
+@pytest_asyncio.fixture(autouse=True)
+async def clean_test_db():
+    """Tự động dọn dẹp các bảng trong test database trước mỗi test case."""
+    settings = get_settings()
+    async with get_db_connection(settings.test_database_url) as conn:
+        await conn.execute("TRUNCATE TABLE chat_messages, chat_sessions, student_activity_logs, quiz_records, students CASCADE;")
+
+
 @pytest.fixture
-def memory_service(tmp_path):
-    """Fixture tạo MemoryService với database SQLite tạm."""
-    db_file = str(tmp_path / "test_memory_service.db")
-    return MemoryService(db_path=db_file)
+def memory_service():
+    """Fixture tạo MemoryService trỏ đến PostgreSQL test database."""
+    settings = get_settings()
+    return MemoryService(db_url=settings.test_database_url)
 
 
 @pytest.mark.asyncio

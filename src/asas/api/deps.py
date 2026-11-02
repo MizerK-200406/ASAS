@@ -13,7 +13,7 @@ def get_app_settings() -> Settings:
 def get_memory_service(request: Request) -> MemoryService:
     if hasattr(request.app.state, "memory_service") and request.app.state.memory_service is not None:
         return request.app.state.memory_service
-    return MemoryService(user_db_path="data/users.db")
+    return MemoryService()
 
 
 def get_evaluator_agent(request: Request) -> EvaluatorAgent:

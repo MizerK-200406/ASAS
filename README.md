@@ -10,7 +10,7 @@ Nền tảng Đánh giá & Hỗ trợ Học tập Cá nhân hóa sử dụng ki�
 - **Package Manager**: [uv](https://github.com/astral-sh/uv) (Cực nhanh, hỗ trợ PEP 621 & lockfile)
 - **LLM Provider**: NVIDIA NIM API (OpenAI-compatible)
 - **Model**: deepseek-ai/deepseek-v4-flash
-- **Framework**: FastAPI, Pydantic v2, aiosqlite
+- **Framework**: FastAPI, Pydantic v2, asyncpg (PostgreSQL)
 - **Testing**: Pytest (TDD workflow)
 
 ## Cài đặt & Sử dụng với `uv`

@@ -22,11 +22,13 @@ class MemoryService:
 
     def __init__(
         self,
+        db_url: Optional[str] = None,
         db_path: Optional[str] = None,
         user_db_path: Optional[str] = None,
         chat_db_path: Optional[str] = None,
     ) -> None:
         self.repository = MemoryRepository(
+            db_url=db_url,
             db_path=db_path,
             user_db_path=user_db_path,
             chat_db_path=chat_db_path,

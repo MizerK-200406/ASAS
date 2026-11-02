@@ -1,109 +1,135 @@
-"""SQLite database connection and schema initialization using aiosqlite."""
+"""PostgreSQL database connection, pooling, and schema initialization using asyncpg."""
 
+import asyncio
 from contextlib import asynccontextmanager
-import os
-from typing import AsyncGenerator
-import aiosqlite
+from typing import AsyncGenerator, Optional, Union
+import asyncpg
+from loguru import logger
 
-USER_SCHEMA_SQL = """
+from asas.core.config import get_settings
+
+POSTGRES_SCHEMA_SQL = """
 CREATE TABLE IF NOT EXISTS students (
-    student_id TEXT PRIMARY KEY,
-    name TEXT NOT NULL,
-    grade_level TEXT,
-    school TEXT,
-    target_subjects TEXT NOT NULL DEFAULT '[]',
+    student_id VARCHAR(64) PRIMARY KEY,
+    name VARCHAR(255) NOT NULL,
+    grade_level VARCHAR(50),
+    school VARCHAR(255),
+    target_subjects JSONB NOT NULL DEFAULT '[]'::jsonb,
     target_goal TEXT,
-    learning_style TEXT,
-    created_at TEXT NOT NULL,
-    updated_at TEXT NOT NULL
+    learning_style VARCHAR(100),
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
 CREATE TABLE IF NOT EXISTS quiz_records (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    student_id TEXT NOT NULL,
-    topic TEXT NOT NULL,
-    score_percentage REAL NOT NULL,
-    total_questions INTEGER NOT NULL,
-    correct_count INTEGER NOT NULL,
+    id SERIAL PRIMARY KEY,
+    student_id VARCHAR(64) NOT NULL REFERENCES students(student_id) ON DELETE CASCADE,
+    topic VARCHAR(255) NOT NULL,
+    score_percentage DOUBLE PRECISION NOT NULL,
+    total_questions INT NOT NULL,
+    correct_count INT NOT NULL,
     ai_praise TEXT,
     ai_critique TEXT,
     improvement_plan TEXT,
-    completed_at TEXT NOT NULL,
-    FOREIGN KEY (student_id) REFERENCES students(student_id) ON DELETE CASCADE
+    completed_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
 CREATE TABLE IF NOT EXISTS student_activity_logs (
-    id TEXT PRIMARY KEY,
-    student_id TEXT NOT NULL,
-    action_type TEXT NOT NULL,
+    id VARCHAR(64) PRIMARY KEY,
+    student_id VARCHAR(64) NOT NULL REFERENCES students(student_id) ON DELETE CASCADE,
+    action_type VARCHAR(100) NOT NULL,
     description TEXT NOT NULL,
-    created_at TEXT NOT NULL,
-    FOREIGN KEY (student_id) REFERENCES students(student_id) ON DELETE CASCADE
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
-CREATE INDEX IF NOT EXISTS idx_quiz_student ON quiz_records(student_id);
-CREATE INDEX IF NOT EXISTS idx_activity_student ON student_activity_logs(student_id);
-"""
-
-CHAT_SCHEMA_SQL = """
 CREATE TABLE IF NOT EXISTS chat_sessions (
-    id TEXT PRIMARY KEY,
-    student_id TEXT NOT NULL,
-    title TEXT NOT NULL,
-    created_at TEXT NOT NULL,
-    updated_at TEXT NOT NULL
+    id VARCHAR(64) PRIMARY KEY,
+    student_id VARCHAR(64) NOT NULL REFERENCES students(student_id) ON DELETE CASCADE,
+    title VARCHAR(255) NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
 CREATE TABLE IF NOT EXISTS chat_messages (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    session_id TEXT NOT NULL,
-    role TEXT NOT NULL,
+    id SERIAL PRIMARY KEY,
+    session_id VARCHAR(64) NOT NULL REFERENCES chat_sessions(id) ON DELETE CASCADE,
+    role VARCHAR(50) NOT NULL,
     content TEXT NOT NULL,
-    agent_role TEXT,
-    created_at TEXT NOT NULL,
-    FOREIGN KEY (session_id) REFERENCES chat_sessions(id) ON DELETE CASCADE
+    agent_role VARCHAR(50),
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
-CREATE INDEX IF NOT EXISTS idx_chat_session_student ON chat_sessions(student_id);
-CREATE INDEX IF NOT EXISTS idx_chat_message_session ON chat_messages(session_id);
+CREATE INDEX IF NOT EXISTS idx_quiz_records_student ON quiz_records(student_id);
+CREATE INDEX IF NOT EXISTS idx_activity_logs_student ON student_activity_logs(student_id);
+CREATE INDEX IF NOT EXISTS idx_chat_sessions_student ON chat_sessions(student_id);
+CREATE INDEX IF NOT EXISTS idx_chat_messages_session ON chat_messages(session_id);
 """
 
-SCHEMA_SQL = USER_SCHEMA_SQL + "\n" + CHAT_SCHEMA_SQL
+# Alias schema SQL
+SCHEMA_SQL = POSTGRES_SCHEMA_SQL
+USER_SCHEMA_SQL = POSTGRES_SCHEMA_SQL
+CHAT_SCHEMA_SQL = POSTGRES_SCHEMA_SQL
 
 
-async def init_user_db(db: aiosqlite.Connection) -> None:
-    """Tạo schema CSDL người dùng (students, quiz_records, activities)."""
-    await db.executescript(USER_SCHEMA_SQL)
-    await db.commit()
+class DatabasePool:
+    """Singleton quản lý asyncpg Connection Pool gắn với running event loop."""
+
+    _pools: dict[str, asyncpg.Pool] = {}
+
+    @classmethod
+    async def get_pool(cls, dsn: Optional[str] = None) -> asyncpg.Pool:
+        target_dsn = dsn or get_settings().database_url
+        current_loop = asyncio.get_running_loop()
+        existing_pool = cls._pools.get(target_dsn)
+
+        if (
+            existing_pool is None
+            or existing_pool._closed
+            or getattr(existing_pool, "_loop", None) != current_loop
+            or existing_pool._loop.is_closed()
+        ):
+            cls._pools[target_dsn] = await asyncpg.create_pool(
+                dsn=target_dsn,
+                min_size=1,
+                max_size=10,
+                command_timeout=60,
+            )
+        return cls._pools[target_dsn]
+
+    @classmethod
+    async def close_all(cls) -> None:
+        for dsn, pool in list(cls._pools.items()):
+            if not pool._closed:
+                await pool.close()
+        cls._pools.clear()
 
 
-async def init_chat_db(db: aiosqlite.Connection) -> None:
-    """Tạo schema CSDL lịch sử hội thoại (chat_sessions, chat_messages)."""
-    await db.executescript(CHAT_SCHEMA_SQL)
-    await db.commit()
+async def init_db(target: Union[asyncpg.Connection, asyncpg.Pool, str]) -> None:
+    """Tạo schema CSDL trên kết nối hoặc pool PostgreSQL."""
+    if isinstance(target, str):
+        conn = await asyncpg.connect(target)
+        try:
+            await conn.execute(POSTGRES_SCHEMA_SQL)
+        finally:
+            await conn.close()
+    elif isinstance(target, asyncpg.Pool):
+        async with target.acquire() as conn:
+            await conn.execute(POSTGRES_SCHEMA_SQL)
+    else:
+        await target.execute(POSTGRES_SCHEMA_SQL)
 
 
-async def init_db(db: aiosqlite.Connection) -> None:
-    """Tạo toàn bộ schema CSDL trên một kết nối SQLite (hỗ trợ backward compatibility)."""
-    await db.executescript(SCHEMA_SQL)
-    await db.commit()
+async def init_user_db(target: Union[asyncpg.Connection, asyncpg.Pool, str]) -> None:
+    await init_db(target)
+
+
+async def init_chat_db(target: Union[asyncpg.Connection, asyncpg.Pool, str]) -> None:
+    await init_db(target)
 
 
 @asynccontextmanager
-async def get_db_connection(db_path: str = "data/asas.db") -> AsyncGenerator[aiosqlite.Connection, None]:
-    """Async context manager cung cấp kết nối CSDL SQLite an toàn và cấu hình chuẩn.
-
-    Args:
-        db_path: Đường dẫn file CSDL (hoặc ':memory:' cho in-memory testing).
-    """
-    if db_path != ":memory:":
-        os.makedirs(os.path.dirname(os.path.abspath(db_path)), exist_ok=True)
-
-    db = await aiosqlite.connect(db_path)
-    try:
-        await db.execute("PRAGMA foreign_keys = ON;")
-        if db_path != ":memory:":
-            await db.execute("PRAGMA journal_mode = WAL;")
-        yield db
-    finally:
-        await db.close()
+async def get_db_connection(dsn: Optional[str] = None) -> AsyncGenerator[asyncpg.Connection, None]:
+    """Async context manager cung cấp kết nối PostgreSQL từ connection pool."""
+    pool = await DatabasePool.get_pool(dsn)
+    async with pool.acquire() as conn:
+        yield conn

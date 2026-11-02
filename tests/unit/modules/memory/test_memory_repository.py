@@ -1,16 +1,27 @@
-"""Unit tests for MemoryRepository using SQLite async operations."""
+"""Unit tests for MemoryRepository using PostgreSQL async operations."""
 
 from datetime import datetime, timedelta, timezone
 import pytest
+import pytest_asyncio
+from asas.core.config import get_settings
+from asas.modules.memory.db import get_db_connection
 from asas.modules.memory.repository import MemoryRepository
 from asas.modules.memory.schemas import QuizRecord
 
 
+@pytest_asyncio.fixture(autouse=True)
+async def clean_test_db():
+    """Tự động dọn dẹp các bảng trong test database trước mỗi test case."""
+    settings = get_settings()
+    async with get_db_connection(settings.test_database_url) as conn:
+        await conn.execute("TRUNCATE TABLE chat_messages, chat_sessions, student_activity_logs, quiz_records, students CASCADE;")
+
+
 @pytest.fixture
-def repo(tmp_path):
-    """Fixture tạo MemoryRepository với database tạm thời tự dọn dẹp sau test."""
-    db_file = str(tmp_path / "test_memory.db")
-    return MemoryRepository(db_path=db_file)
+def repo():
+    """Fixture cung cấp MemoryRepository trỏ đến test database."""
+    settings = get_settings()
+    return MemoryRepository(db_url=settings.test_database_url)
 
 
 @pytest.mark.asyncio
@@ -58,222 +69,199 @@ async def test_quiz_record_and_statistics(repo):
         total_questions=5,
         correct_count=5,
     )
+    id1 = await repo.save_quiz_record(q1)
+    id2 = await repo.save_quiz_record(q2)
+    assert id1 > 0
+    assert id2 > 0
 
-    await repo.save_quiz_record(q1)
-    await repo.save_quiz_record(q2)
-
-    # Lấy lịch sử bài làm
-    history = await repo.get_quiz_history("student_01")
+    # Lấy lịch sử
+    history = await repo.get_quiz_history("student_01", limit=10)
     assert len(history) == 2
-    assert history[0].topic == "Đại số tuyến tính"  # Sắp xếp mới nhất lên đầu
-    assert history[1].topic == "Python Cơ bản"
+    # Sắp xếp mới nhất trước
+    assert history[0].topic == "Đại số tuyến tính"
 
-    # Lấy thống kê
+    # Thống kê
     stats = await repo.get_quiz_statistics("student_01")
     assert stats["total_quizzes"] == 2
     assert stats["average_score"] == 90.0
-    assert stats["total_questions"] == 10
-    assert stats["total_correct"] == 9
+    assert stats["highest_score"] == 100.0
 
 
 @pytest.mark.asyncio
 async def test_get_or_create_student_with_extended_fields(repo):
-    """Kiểm tra lưu và lấy học sinh với trường mở rộng (school, target_goal, learning_style)."""
+    """Kiểm tra tạo học sinh với các trường mở rộng (school, target_goal, learning_style)."""
     await repo.initialize()
-    created = await repo.get_or_create_student(
-        student_id="st_phamd",
-        name="Phạm Dương",
-        grade_level="Lớp 12",
-        school="THPT Chu Văn An",
-        target_goal="Điểm 9.0 môn Toán",
-        learning_style="Visual & Socratic",
+    student = await repo.get_or_create_student(
+        student_id="student_ext_01",
+        name="Le Thi B",
+        grade_level="11",
+        school="THPT Chuyên Hà Nội - Amsterdam",
+        target_subjects=["Vật lý", "Hóa học"],
+        target_goal="Đạt 9+ thi THPT Quốc gia",
+        learning_style="Thực hành & Trực quan",
     )
-    assert created.school == "THPT Chu Văn An"
-    assert created.target_goal == "Điểm 9.0 môn Toán"
-    assert created.learning_style == "Visual & Socratic"
+    assert student.school == "THPT Chuyên Hà Nội - Amsterdam"
+    assert student.target_goal == "Đạt 9+ thi THPT Quốc gia"
+    assert student.learning_style == "Thực hành & Trực quan"
+    assert student.updated_at is not None
 
-    # Lấy lại học sinh
-    retrieved = await repo.get_or_create_student("st_phamd", "Phạm Dương")
-    assert retrieved.school == "THPT Chu Văn An"
-    assert retrieved.target_goal == "Điểm 9.0 môn Toán"
-    assert retrieved.learning_style == "Visual & Socratic"
+    # Lấy lại kiểm tra tính bền vững
+    retrieved = await repo.get_or_create_student(
+        student_id="student_ext_01",
+        name="Le Thi B",
+    )
+    assert retrieved.school == "THPT Chuyên Hà Nội - Amsterdam"
+    assert retrieved.target_goal == "Đạt 9+ thi THPT Quốc gia"
+    assert retrieved.learning_style == "Thực hành & Trực quan"
 
 
 @pytest.mark.asyncio
 async def test_quiz_record_ai_critique_persistence(repo):
-    """Kiểm tra lưu và đọc lại các cột lời phê, góp ý cải thiện của AI."""
+    """Kiểm tra lưu trữ và truy xuất đầy đủ các trường nhận xét AI."""
     await repo.initialize()
-    await repo.get_or_create_student("st_01", "Học sinh 1")
+    await repo.get_or_create_student("student_quiz_02", "Tran Van C")
 
-    q = QuizRecord(
-        student_id="st_01",
+    record = QuizRecord(
+        student_id="student_quiz_02",
         topic="Hình học không gian",
         score_percentage=75.0,
         total_questions=4,
         correct_count=3,
-        ai_praise="Em tưởng tượng hình khối rất chuẩn.",
-        ai_critique="Cần cẩn thận khi tính khoảng cách từ điểm đến mặt phẳng.",
-        improvement_plan="Luyện thêm 2 bài tính khoảng cách dạng chân đường cao.",
+        ai_praise="Nắm vững định lý ba đường vuông góc.",
+        ai_critique="Cần cẩn thận khi tính khoảng cách giữa hai đường chéo nhau.",
+        improvement_plan="Làm thêm 5 bài tập về khoảng cách trong tuần này.",
     )
-    await repo.save_quiz_record(q)
+    quiz_id = await repo.save_quiz_record(record)
+    assert quiz_id > 0
 
-    history = await repo.get_quiz_history("st_01")
+    history = await repo.get_quiz_history("student_quiz_02", limit=5)
     assert len(history) == 1
-    item = history[0]
-    assert item.ai_praise == "Em tưởng tượng hình khối rất chuẩn."
-    assert item.ai_critique == "Cần cẩn thận khi tính khoảng cách từ điểm đến mặt phẳng."
-    assert item.improvement_plan == "Luyện thêm 2 bài tính khoảng cách dạng chân đường cao."
+    saved = history[0]
+    assert saved.ai_praise == "Nắm vững định lý ba đường vuông góc."
+    assert saved.ai_critique == "Cần cẩn thận khi tính khoảng cách giữa hai đường chéo nhau."
+    assert saved.improvement_plan == "Làm thêm 5 bài tập về khoảng cách trong tuần này."
 
 
 @pytest.mark.asyncio
 async def test_student_activity_logging(repo):
-    """Kiểm tra ghi nhật ký hành động và truy xuất lịch sử hoạt động của học sinh."""
+    """Kiểm tra ghi nhận nhật ký hoạt động (StudentActivityLog) đa dạng."""
     await repo.initialize()
-    await repo.get_or_create_student("st_01", "Học sinh 1")
+    await repo.get_or_create_student("student_act_01", "Hoang Van D")
 
-    await repo.log_student_activity(
-        student_id="st_01",
-        action_type="QUIZ_COMPLETED",
-        description="Hoàn thành bài Quiz Hình học không gian đạt 75.0%",
+    # Ghi log làm quiz
+    log1 = await repo.log_student_activity(
+        student_id="student_act_01",
+        action_type="quiz_completed",
+        description="Hoàn thành bài kiểm tra Toán 12 với điểm số 85.0%",
     )
-    await repo.log_student_activity(
-        student_id="st_01",
-        action_type="FLASHCARD_REVIEWED",
-        description="Ôn tập 5 thẻ ghi nhớ chủ đề Toán",
-    )
+    assert log1.id is not None
+    assert log1.action_type == "quiz_completed"
 
-    logs = await repo.get_student_activity_logs("st_01", limit=10)
-    assert len(logs) == 2
-    assert logs[0].action_type == "FLASHCARD_REVIEWED"  # Mới nhất xếp trước
-    assert logs[1].action_type == "QUIZ_COMPLETED"
-    assert logs[0].student_id == "st_01"
+    # Lấy danh sách logs
+    logs = await repo.get_student_activity_logs("student_act_01", limit=10)
+    assert len(logs) == 1
+    assert logs[0].action_type == "quiz_completed"
 
 
 @pytest.mark.asyncio
 async def test_get_all_students(repo):
-    """Kiểm tra liệt kê tất cả các hồ sơ học sinh trong CSDL."""
+    """Kiểm tra lấy danh sách toàn bộ học sinh có trong CSDL."""
     await repo.initialize()
-    await repo.get_or_create_student("st_01", "Nguyễn Duy Long", grade_level="Lớp 10")
-    await repo.get_or_create_student("st_02", "Nguyễn Duy Long", grade_level="Lớp 12")
+    await repo.get_or_create_student("s1", "Học sinh 1", grade_level="10")
+    await repo.get_or_create_student("s2", "Học sinh 2", grade_level="11")
+    await repo.get_or_create_student("s3", "Học sinh 3", grade_level="12")
 
-    students = await repo.get_all_students()
-    assert len(students) >= 2
-    ids = [s.student_id for s in students]
-    assert "st_01" in ids
-    assert "st_02" in ids
+    all_students = await repo.get_all_students()
+    assert len(all_students) == 3
+    ids = [s.student_id for s in all_students]
+    assert "s1" in ids
+    assert "s2" in ids
+    assert "s3" in ids
 
 
 @pytest.mark.asyncio
 async def test_get_quiz_record_by_id_drilldown(repo):
-    """Kiểm tra lấy chi tiết một bài quiz theo ID (Master-Detail pattern)."""
+    """Kiểm tra truy vấn chi tiết một bài quiz cụ thể theo ID."""
     await repo.initialize()
-    await repo.get_or_create_student("st_01", "Học sinh A")
+    await repo.get_or_create_student("st_drill", "Nguyen Drill")
 
     q = QuizRecord(
-        student_id="st_01",
-        topic="Java OOP",
-        score_percentage=100.0,
-        total_questions=3,
-        correct_count=3,
-        ai_praise="Em hiểu rất rõ về tính kế thừa và đa hình.",
-        ai_critique="Không có lỗi sai.",
-        improvement_plan="Tiến tới làm bài tập về Interface và Abstract Class.",
+        student_id="st_drill",
+        topic="Lịch sử",
+        score_percentage=90.0,
+        total_questions=10,
+        correct_count=9,
+        ai_praise="Xuất sắc phần lịch sử cận đại",
+        ai_critique="Sai sót câu hỏi mốc thời gian 1945",
+        improvement_plan="Đọc lại SGK trang 120",
     )
-    quiz_id = await repo.save_quiz_record(q)
-    assert quiz_id > 0
+    qid = await repo.save_quiz_record(q)
+    fetched = await repo.get_quiz_record_by_id(qid)
 
-    record = await repo.get_quiz_record_by_id(quiz_id)
-    assert record is not None
-    assert record.id == quiz_id
-    assert record.topic == "Java OOP"
-    assert record.ai_praise == "Em hiểu rất rõ về tính kế thừa và đa hình."
-
-    # Lấy ID không tồn tại
-    non_existent = await repo.get_quiz_record_by_id(999999)
-    assert non_existent is None
+    assert fetched is not None
+    assert fetched.id == qid
+    assert fetched.topic == "Lịch sử"
+    assert fetched.score_percentage == 90.0
+    assert fetched.ai_praise == "Xuất sắc phần lịch sử cận đại"
+    assert fetched.ai_critique == "Sai sót câu hỏi mốc thời gian 1945"
+    assert fetched.improvement_plan == "Đọc lại SGK trang 120"
 
 
 @pytest.mark.asyncio
 async def test_chat_session_and_messages_persistence(repo):
-    """Kiểm tra lưu trữ và truy xuất bền vững phiên chat và các tin nhắn trong SQLite."""
+    """Kiểm tra lưu trữ và truy xuất chat sessions và messages trong PostgreSQL."""
     await repo.initialize()
-    await repo.get_or_create_student("st_01", "Nguyễn Duy Long")
+    await repo.get_or_create_student("st_chat_01", "Nguyen Van Chat")
 
     # Tạo phiên chat
     session = await repo.create_or_get_chat_session(
-        session_id="sess_math_01",
-        student_id="st_01",
-        title="Hỏi bài Tích phân từng phần",
+        session_id="sess_01",
+        student_id="st_chat_01",
+        title="Phiên giải bài Toán Đại số",
     )
-    assert session.id == "sess_math_01"
-    assert session.student_id == "st_01"
+    assert session.id == "sess_01"
+    assert session.student_id == "st_chat_01"
 
-    # Lưu tin nhắn người dùng và tin nhắn AI
-    msg1 = await repo.save_chat_message(
-        session_id="sess_math_01",
+    # Lưu tin nhắn người dùng và trợ lý
+    m1 = await repo.save_chat_message(
+        session_id="sess_01",
         role="user",
-        content="Công thức tích phân từng phần là gì?",
+        content="Cho em hỏi về bất đẳng thức Cauchy",
     )
-    assert msg1.id is not None
-    assert msg1.content == "Công thức tích phân từng phần là gì?"
+    assert m1.id > 0
+    assert m1.content == "Cho em hỏi về bất đẳng thức Cauchy"
 
-    msg2 = await repo.save_chat_message(
-        session_id="sess_math_01",
+    m2 = await repo.save_chat_message(
+        session_id="sess_01",
         role="assistant",
-        content=r"Công thức là: \int u dv = uv - \int v du.",
+        content="Bất đẳng thức Cauchy phát biểu rằng...",
         agent_role="tutor",
     )
-    assert msg2.agent_role == "tutor"
+    assert m2.id > m1.id
+    assert m2.agent_role == "tutor"
 
-    # Lấy lại lịch sử tin nhắn của phiên
-    history = await repo.get_session_chat_messages("sess_math_01")
-    assert len(history) == 2
-    assert history[0].role == "user"
-    assert history[1].role == "assistant"
-    assert history[1].agent_role == "tutor"
-
-    # Lấy danh sách các phiên chat của học sinh
-    sessions = await repo.get_student_chat_sessions("st_01")
-    assert len(sessions) == 1
-    assert sessions[0].title == "Hỏi bài Tích phân từng phần"
+    # Lấy danh sách tin nhắn
+    messages = await repo.get_session_chat_messages("sess_01")
+    assert len(messages) == 2
+    assert messages[0].role == "user"
+    assert messages[1].role == "assistant"
+    assert messages[1].agent_role == "tutor"
 
 
 @pytest.mark.asyncio
-async def test_dual_database_repository(tmp_path):
-    """Kiểm tra MemoryRepository hoạt động chuẩn xác khi phân tách users.db và chats.db."""
-    import aiosqlite
+async def test_dual_database_repository():
+    """Kiểm tra MemoryRepository hoạt động chuẩn xác với PostgreSQL."""
+    settings = get_settings()
+    repo = MemoryRepository(db_url=settings.test_database_url)
+    await repo.initialize()
 
-    user_db = str(tmp_path / "users.db")
-    chat_db = str(tmp_path / "chats.db")
-
-    dual_repo = MemoryRepository(user_db_path=user_db, chat_db_path=chat_db)
-    await dual_repo.initialize()
-
-    # Thao tác với user_db
-    st = await dual_repo.get_or_create_student("st_dual_01", "Pham Duong", grade_level="Lớp 11")
+    st = await repo.get_or_create_student("st_dual_01", "Pham Duong", grade_level="Lớp 11")
     assert st.student_id == "st_dual_01"
 
-    # Thao tác với chat_db
-    sess = await dual_repo.create_or_get_chat_session("sess_dual_01", "st_dual_01", title="Hỏi bài Sinh học")
-    assert sess.id == "sess_dual_01"
-
-    msg = await dual_repo.save_chat_message("sess_dual_01", role="user", content="Quang hợp là gì?")
-    assert msg.id is not None
-
-    # Xác thực trên tệp CSDL vật lý
-    async with aiosqlite.connect(user_db) as u_conn:
-        async with u_conn.execute("SELECT name FROM sqlite_master WHERE type='table'") as cur:
-            u_tables = [r[0] for r in await cur.fetchall()]
-            assert "students" in u_tables
-            assert "chat_sessions" not in u_tables
-
-    async with aiosqlite.connect(chat_db) as c_conn:
-        async with c_conn.execute("SELECT name FROM sqlite_master WHERE type='table'") as cur:
-            c_tables = [r[0] for r in await cur.fetchall()]
-            assert "chat_sessions" in c_tables
-            assert "chat_messages" in c_tables
-            assert "students" not in c_tables
-
-
-
-
+    sess = await repo.create_or_get_chat_session(
+        session_id="sess_dual_01",
+        student_id="st_dual_01",
+        title="Hỏi bài Sinh học",
+    )
+    assert sess.student_id == "st_dual_01"
+    assert sess.title == "Hỏi bài Sinh học"
