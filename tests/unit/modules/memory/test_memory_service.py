@@ -1,7 +1,6 @@
-"""Unit tests for MemoryService orchestrating session memory, repository, and flashcards."""
+"""Unit tests for MemoryService orchestrating session memory and repository."""
 
 import pytest
-from asas.modules.flashcard.schemas import FlashcardItem, FlashcardSet
 from asas.modules.memory.service import MemoryService
 
 
@@ -46,29 +45,6 @@ async def test_quiz_and_student_summary(memory_service):
     assert summary["quiz_stats"]["total_quizzes"] == 1
     assert summary["quiz_stats"]["average_score"] == 100.0
     assert len(summary["recent_quizzes"]) == 1
-
-
-@pytest.mark.asyncio
-async def test_flashcard_import_and_retrieval(memory_service):
-    """Kiểm tra chu trình nạp Flashcard từ FlashcardSet và truy xuất danh sách thẻ."""
-    await memory_service.initialize()
-    await memory_service.get_or_create_student("st_01", "Trần Văn B")
-
-    # Giả lập FlashcardSet vừa sinh từ FlashcardService
-    cards = [
-        FlashcardItem(front="CPU là gì?", back="Central Processing Unit", tags=["CS"]),
-        FlashcardItem(front="RAM là gì?", back="Random Access Memory", tags=["CS"]),
-    ]
-    card_set = FlashcardSet(topic="Phần cứng máy tính", cards=cards)
-
-    # Nạp thẻ vào bộ nhớ
-    saved_cards = await memory_service.import_flashcard_set("st_01", card_set)
-    assert len(saved_cards) == 2
-
-    # Lấy danh sách thẻ của học sinh
-    student_cards = await memory_service.get_student_flashcards("st_01")
-    assert len(student_cards) == 2
-    assert {c.front for c in student_cards} == {"CPU là gì?", "RAM là gì?"}
 
 
 @pytest.mark.asyncio

@@ -3,7 +3,7 @@
 from datetime import datetime, timedelta, timezone
 import pytest
 from asas.modules.memory.repository import MemoryRepository
-from asas.modules.memory.schemas import FlashcardProgress, QuizRecord
+from asas.modules.memory.schemas import QuizRecord
 
 
 @pytest.fixture
@@ -74,41 +74,6 @@ async def test_quiz_record_and_statistics(repo):
     assert stats["average_score"] == 90.0
     assert stats["total_questions"] == 10
     assert stats["total_correct"] == 9
-
-
-@pytest.mark.asyncio
-async def test_flashcard_progress_and_retrieval(repo):
-    """Kiểm tra lưu flashcard và lấy danh sách thẻ của học sinh."""
-    await repo.initialize()
-    await repo.get_or_create_student("student_01", "Nguyen Van A")
-
-    card_1 = FlashcardProgress(
-        card_id="card_1",
-        student_id="student_01",
-        front="1 + 1",
-        back="2",
-    )
-    card_2 = FlashcardProgress(
-        card_id="card_2",
-        student_id="student_01",
-        front="2 + 2",
-        back="4",
-    )
-
-    await repo.save_flashcard_progress(card_1)
-    await repo.save_flashcard_progress(card_2)
-
-    # Lấy thẻ theo card_id
-    card = await repo.get_flashcard("card_1")
-    assert card is not None
-    assert card.front == "1 + 1"
-    assert card.back == "2"
-
-    # Lấy danh sách thẻ của học sinh
-    cards = await repo.get_student_flashcards("student_01")
-    assert len(cards) == 2
-    card_ids = {c.card_id for c in cards}
-    assert card_ids == {"card_1", "card_2"}
 
 
 @pytest.mark.asyncio

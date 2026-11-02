@@ -6,6 +6,7 @@ from fastapi.testclient import TestClient
 from asas.api.app import create_app
 from asas.api.deps import get_memory_service, get_quiz_service
 from asas.core.llm_client import LLMParseError
+from asas.modules.agents.schemas import EvaluationResult
 from asas.modules.memory.service import MemoryService
 from asas.modules.quiz.service import QuizService
 from asas.modules.quiz.schemas import (
@@ -20,8 +21,7 @@ from asas.modules.quiz.schemas import (
 @pytest.fixture
 def memory_service(tmp_path):
     user_db = str(tmp_path / "test_quiz_users.db")
-    chat_db = str(tmp_path / "test_quiz_chats.db")
-    service = MemoryService(user_db_path=user_db, chat_db_path=chat_db)
+    service = MemoryService(user_db_path=user_db)
     asyncio.run(service.initialize())
     return service
 
@@ -58,6 +58,16 @@ def mock_quiz_service():
         ],
     )
     service.generate_quiz = AsyncMock(return_value=sample_quiz)
+    service.evaluate_quiz_with_agent = AsyncMock(
+        return_value=EvaluationResult(
+            score_summary="Đạt 50%",
+            strengths=["Nắm vững khái niệm về đồ thị liên thông"],
+            knowledge_gaps=["Chưa phân biệt được cây và đồ thị có chu trình"],
+            critique="Học sinh chọn nhầm định nghĩa của cây.",
+            recommendations=["Ôn tập lại cây khung và đồ thị phi chu trình"],
+            improvement_plan="Làm bài tập cây nhị phân.",
+        )
+    )
     return service
 
 
@@ -111,7 +121,7 @@ def test_generate_quiz_llm_parse_error(client, mock_quiz_service):
     assert "Mô hình AI phản hồi dữ liệu không chuẩn" in response.json()["detail"]
 
 
-def test_grade_quiz_anonymous(client):
+def test_grade_quiz_anonymous(client, mock_quiz_service):
     quiz_payload = {
         "title": "Kiểm tra Toán",
         "topic": "Toán",
@@ -130,12 +140,12 @@ def test_grade_quiz_anonymous(client):
         ],
     }
 
-    # Answer correctly
     response = client.post(
         "/api/v1/quiz/grade",
         json={
             "quiz": quiz_payload,
             "user_answers": {0: "A"},
+            "evaluate_with_agent": True,
         },
     )
     assert response.status_code == 200
@@ -146,9 +156,12 @@ def test_grade_quiz_anonymous(client):
     assert data["record_id"] is None
     assert len(data["details"]) == 1
     assert data["details"][0]["is_correct"] is True
+    assert data["evaluation"] is not None
+    assert "cây và đồ thị" in data["evaluation"]["knowledge_gaps"][0]
+    mock_quiz_service.evaluate_quiz_with_agent.assert_called_once()
 
 
-def test_grade_quiz_with_student_record(client, memory_service):
+def test_grade_quiz_with_student_record(client, memory_service, mock_quiz_service):
     # Setup student
     asyncio.run(
         memory_service.get_or_create_student(
@@ -193,6 +206,7 @@ def test_grade_quiz_with_student_record(client, memory_service):
             "student_id": "student_quiz_01",
             "quiz": quiz_payload,
             "user_answers": {0: "B", 1: "A"},
+            "evaluate_with_agent": True,
         },
     )
     assert response.status_code == 200
@@ -201,10 +215,14 @@ def test_grade_quiz_with_student_record(client, memory_service):
     assert data["correct_count"] == 1
     assert data["score_percentage"] == 50.0
     assert data["record_id"] is not None
+    assert data["evaluation"] is not None
 
     # Check that student profile has updated statistics
     summary = asyncio.run(memory_service.get_student_summary("student_quiz_01"))
     assert summary["quiz_stats"]["total_quizzes"] == 1
     assert summary["quiz_stats"]["average_score"] == 50.0
-    assert len(summary["recent_activities"]) >= 1
+    assert len(summary["recent_quizzes"]) == 1
+    recent_quiz = summary["recent_quizzes"][0]
+    assert recent_quiz.ai_praise is not None
+    assert recent_quiz.ai_critique is not None
     assert "QUIZ_COMPLETED" in [a.action_type for a in summary["recent_activities"]]

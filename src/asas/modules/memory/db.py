@@ -32,15 +32,6 @@ CREATE TABLE IF NOT EXISTS quiz_records (
     FOREIGN KEY (student_id) REFERENCES students(student_id) ON DELETE CASCADE
 );
 
-CREATE TABLE IF NOT EXISTS flashcard_progress (
-    card_id TEXT PRIMARY KEY,
-    student_id TEXT NOT NULL,
-    front TEXT NOT NULL,
-    back TEXT NOT NULL,
-    created_at TEXT NOT NULL,
-    FOREIGN KEY (student_id) REFERENCES students(student_id) ON DELETE CASCADE
-);
-
 CREATE TABLE IF NOT EXISTS student_activity_logs (
     id TEXT PRIMARY KEY,
     student_id TEXT NOT NULL,
@@ -51,7 +42,6 @@ CREATE TABLE IF NOT EXISTS student_activity_logs (
 );
 
 CREATE INDEX IF NOT EXISTS idx_quiz_student ON quiz_records(student_id);
-CREATE INDEX IF NOT EXISTS idx_flashcard_student ON flashcard_progress(student_id);
 CREATE INDEX IF NOT EXISTS idx_activity_student ON student_activity_logs(student_id);
 """
 
@@ -82,7 +72,7 @@ SCHEMA_SQL = USER_SCHEMA_SQL + "\n" + CHAT_SCHEMA_SQL
 
 
 async def init_user_db(db: aiosqlite.Connection) -> None:
-    """Tạo schema CSDL người dùng (students, quiz_records, flashcards, activities)."""
+    """Tạo schema CSDL người dùng (students, quiz_records, activities)."""
     await db.executescript(USER_SCHEMA_SQL)
     await db.commit()
 

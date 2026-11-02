@@ -6,7 +6,6 @@ from pydantic import ValidationError
 
 from asas.modules.memory.schemas import (
     ChatMessage,
-    FlashcardProgress,
     MessageRole,
     QuizRecord,
     StudentProfile,
@@ -46,21 +45,6 @@ def test_quiz_record_schema():
     assert record.score_percentage == 80.0
     assert record.correct_count == 4
     assert record.total_questions == 5
-
-
-def test_flashcard_progress_defaults():
-    """Kiểm tra FlashcardProgress với các thông số mặc định."""
-    progress = FlashcardProgress(
-        card_id="card_101",
-        student_id="student_01",
-        front="Mặt trước",
-        back="Mặt sau",
-    )
-    assert progress.card_id == "card_101"
-    assert progress.student_id == "student_01"
-    assert progress.front == "Mặt trước"
-    assert progress.back == "Mặt sau"
-    assert isinstance(progress.created_at, datetime)
 
 
 def test_student_profile_extended_fields():

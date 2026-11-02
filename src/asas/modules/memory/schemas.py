@@ -1,4 +1,4 @@
-"""Pydantic schemas for memory management, student profile, and flashcards."""
+"""Pydantic schemas for memory management and student profile."""
 
 from datetime import datetime, timezone
 from enum import Enum
@@ -21,7 +21,7 @@ class MessageRole(str, Enum):
 
 
 class ChatMessage(BaseModel):
-    """Mô hình dữ liệu cho một tin nhắn trong bộ nhớ phiên (Session Memory)."""
+    """Mô hình dữ liệu cho một tin nhắn trong bộ nhớ phiên."""
 
     role: MessageRole
     content: str
@@ -58,7 +58,7 @@ class QuizRecord(BaseModel):
 
 
 class StudentActivityLog(BaseModel):
-    """Nhật ký hoạt động của học sinh (làm quiz, ôn flashcard, chat trợ lý, dùng tools)."""
+    """Nhật ký hoạt động của học sinh (làm quiz, dùng tools)."""
 
     id: str
     student_id: str
@@ -85,14 +85,4 @@ class ChatMessageRecord(BaseModel):
     role: str
     content: str
     agent_role: Optional[str] = None
-    created_at: datetime = Field(default_factory=utc_now)
-
-
-class FlashcardProgress(BaseModel):
-    """Trạng thái lưu trữ của một Flashcard trong CSDL của học sinh."""
-
-    card_id: str
-    student_id: str
-    front: str
-    back: str
     created_at: datetime = Field(default_factory=utc_now)

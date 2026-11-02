@@ -1,50 +1,49 @@
-"""Pydantic schemas and decision models for the Multi-Agent Orchestration System."""
+"""Pydantic schemas for the AI Evaluator Agent system."""
 
 from datetime import datetime
 from enum import Enum
-from typing import Any, Dict, Optional
-from pydantic import BaseModel, Field, field_validator
+from typing import Any, Dict, List, Optional
+from pydantic import BaseModel, Field
 from asas.modules.memory.schemas import utc_now
 
 
 class AgentRole(str, Enum):
-    """Vai trò của từng tác tử chuyên trách trong hệ thống ASAS."""
+    """Vai trò của tác tử trong hệ thống."""
 
-    SUPERVISOR = "supervisor"
-    TUTOR = "tutor"
     EVALUATOR = "evaluator"
-    PLANNER = "planner"
 
 
-class SupervisorDecision(BaseModel):
-    """Cấu trúc quyết định phân luồng từ Supervisor Agent sang Agent chuyên trách."""
+class EvaluationResult(BaseModel):
+    """Kết quả đánh giá sư phạm chuẩn hóa của Evaluator Agent."""
 
-    next_agent: AgentRole = Field(
+    score_summary: Optional[str] = Field(None, description="Tóm tắt điểm số hoặc đánh giá tổng quan ngắn gọn")
+    strengths: List[str] = Field(
+        default_factory=list,
+        description="Điểm mạnh, các câu hỏi hoặc khái niệm học sinh đã nắm vững",
+    )
+    knowledge_gaps: List[str] = Field(
+        default_factory=list,
+        description="Lỗ hổng kiến thức, ngộ nhận lý thuyết hoặc sai sót logic phát hiện được",
+    )
+    critique: str = Field(
         ...,
-        description="Agent tiếp theo được ủy quyền xử lý (tutor, evaluator, hoặc planner).",
+        description="Phân tích sư phạm chi tiết về các lỗi sai và nguyên nhân",
     )
-    reasoning: str = Field(
-        ...,
-        description="Lý giải nguyên nhân tại sao yêu cầu của học sinh nên được chuyển cho agent này.",
+    recommendations: List[str] = Field(
+        default_factory=list,
+        description="Danh sách lời khuyên và chủ đề cần tập trung ôn luyện",
     )
-    instructions: Optional[str] = Field(
-        default=None,
-        description="Chỉ đạo hoặc lưu ý sư phạm bổ sung của Supervisor gửi cho agent tiếp nhận.",
+    improvement_plan: Optional[str] = Field(
+        None,
+        description="Kế hoạch hành động cụ thể để khắc phục lỗ hổng kiến thức",
     )
-
-    @field_validator("next_agent")
-    @classmethod
-    def validate_not_supervisor(cls, v: AgentRole) -> AgentRole:
-        """Ngăn chặn Supervisor tự gọi lại chính mình gây vòng lặp vô tận."""
-        if v == AgentRole.SUPERVISOR:
-            raise ValueError("Supervisor không thể tự điều hướng lại chính mình.")
-        return v
 
 
 class AgentResponse(BaseModel):
-    """Phản hồi hoàn chỉnh từ một tác tử sau khi xử lý xong yêu cầu."""
+    """Phản hồi hoàn chỉnh từ Evaluator Agent."""
 
-    agent_role: AgentRole
-    content: str
+    agent_role: AgentRole = AgentRole.EVALUATOR
+    evaluation: EvaluationResult
+    content: str = Field(default="", description="Nội dung tổng hợp hoặc hiển thị dạng văn bản")
     metadata: Dict[str, Any] = Field(default_factory=dict)
     created_at: datetime = Field(default_factory=utc_now)

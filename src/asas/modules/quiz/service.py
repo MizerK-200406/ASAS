@@ -2,6 +2,8 @@ from typing import Dict, Optional
 from loguru import logger
 
 from asas.core.llm_client import LLMClient
+from asas.modules.agents.evaluator import EvaluatorAgent
+from asas.modules.agents.schemas import EvaluationResult
 from asas.modules.quiz.schemas import (
     Quiz,
     QuizGenerationRequest,
@@ -10,10 +12,15 @@ from asas.modules.quiz.schemas import (
 
 
 class QuizService:
-    """Service xử lý tạo đề trắc nghiệm và chấm điểm bài làm."""
+    """Service xử lý tạo đề trắc nghiệm, chấm điểm bài làm và điều phối Evaluator Agent."""
 
-    def __init__(self, llm_client: Optional[LLMClient] = None):
+    def __init__(
+        self,
+        llm_client: Optional[LLMClient] = None,
+        evaluator_agent: Optional[EvaluatorAgent] = None,
+    ):
         self.llm_client = llm_client or LLMClient()
+        self.evaluator_agent = evaluator_agent or EvaluatorAgent(llm_client=self.llm_client)
 
     async def generate_quiz(self, request: QuizGenerationRequest) -> Quiz:
         """Tạo bộ câu hỏi trắc nghiệm chất lượng cao dựa trên yêu cầu của học sinh."""
@@ -86,4 +93,19 @@ class QuizService:
             correct_count=correct_count,
             score_percentage=score_percentage,
             details=details,
+        )
+
+    async def evaluate_quiz_with_agent(
+        self,
+        quiz: Quiz,
+        user_answers: Dict[int, str],
+        grade_result: QuizGradeResult,
+        student_name: Optional[str] = None,
+    ) -> EvaluationResult:
+        """Kích hoạt EvaluatorAgent để phân tích lỗ hổng kiến thức và đưa ra lời khuyên."""
+        return await self.evaluator_agent.evaluate_quiz(
+            quiz=quiz,
+            user_answers=user_answers,
+            grade_result=grade_result,
+            student_name=student_name,
         )

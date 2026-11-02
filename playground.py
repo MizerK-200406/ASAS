@@ -1,12 +1,10 @@
-"""Playground Script - Trải nghiệm trực tiếp AI Study Assistant (ASAS) với NVIDIA API."""
+"""Playground Script - Trải nghiệm trực tiếp AI Assessment System (ASAS) với Evaluator Agent."""
 
 import asyncio
-import hashlib
 import os
 import re
 import sys
 import uuid
-
 
 # Cấu hình UTF-8 cho Windows Terminal hiển thị tiếng Việt mượt mà
 if sys.platform == "win32":
@@ -20,20 +18,17 @@ if sys.platform == "win32":
 sys.path.insert(0, os.path.abspath("src"))
 
 from asas.core.config import get_settings
+from asas.core.llm_client import LLMClient
+from asas.modules.agents.evaluator import EvaluatorAgent
+from asas.modules.memory.service import MemoryService
 from asas.modules.quiz.schemas import DifficultyLevel, QuizGenerationRequest
 from asas.modules.quiz.service import QuizService
-from asas.modules.flashcard.schemas import FlashcardGenerationRequest
-from asas.modules.flashcard.service import FlashcardService
-from asas.core.llm_client import LLMClient
-from asas.modules.tools.registry import create_default_registry
-from asas.modules.memory.service import MemoryService
-from asas.modules.agents.orchestrator import MultiAgentOrchestrator
 
 
 async def main():
-    print("=" * 60)
-    print("🎓 CHÀO MỪNG BẠN ĐẾN VỚI AI STUDY ASSISTANT (ASAS)")
-    print("=" * 60)
+    print("=" * 65)
+    print("🎓 CHÀO MỪNG BẠN ĐẾN VỚI AI ASSESSMENT SYSTEM (ASAS)")
+    print("=" * 65)
 
     # 1. Kiểm tra cấu hình
     try:
@@ -43,21 +38,13 @@ async def main():
         print(f"❌ Lỗi cấu hình: Hãy kiểm tra file .env đã có NVIDIA_API_KEY chưa!\nChi tiết: {e}")
         return
 
-    quiz_service = QuizService()
-    flashcard_service = FlashcardService()
     llm_client = LLMClient()
-    tool_registry = create_default_registry()
+    evaluator_agent = EvaluatorAgent(llm_client=llm_client)
+    quiz_service = QuizService(llm_client=llm_client, evaluator_agent=evaluator_agent)
 
-    # Khởi tạo Memory Service phân tách 2 CSDL riêng biệt trong thư mục data/
-    memory_service = MemoryService(user_db_path="data/users.db", chat_db_path="data/chats.db")
+    # Khởi tạo Memory Service
+    memory_service = MemoryService(user_db_path="data/users.db")
     await memory_service.initialize()
-
-    # Khởi tạo Multi-Agent Orchestrator
-    orchestrator = MultiAgentOrchestrator(
-        llm_client=llm_client,
-        tool_registry=tool_registry,
-        memory_service=memory_service,
-    )
 
     # -------------------------------------------------------------
     # Quản lý danh tính học sinh (Identity & Profile Selection)
@@ -66,9 +53,9 @@ async def main():
     student_profile = None
 
     if existing_students:
-        print("\n" + "=" * 60)
+        print("\n" + "=" * 65)
         print("👥 DANH SÁCH HỒ SƠ HỌC SINH ĐÃ LƯU TRONG CƠ SỞ DỮ LIỆU")
-        print("=" * 60)
+        print("=" * 65)
         for idx, st in enumerate(existing_students, 1):
             grade_str = f"[{st.grade_level}]" if st.grade_level else ""
             school_str = f"({st.school})" if st.school else ""
@@ -87,7 +74,6 @@ async def main():
         elif user_choice.lower() == "new":
             student_profile = None
         else:
-            # Tìm theo student_id chính xác
             for st in existing_students:
                 if st.student_id.lower() == user_choice.lower():
                     student_profile = st
@@ -95,9 +81,9 @@ async def main():
 
     # Nếu chưa có hồ sơ nào hoặc người dùng chọn tạo mới:
     if not student_profile:
-        print("\n" + "=" * 60)
-        print("📝 ĐĂNG KÝ HỒ SƠ HỌC SINH MỚI (CHỐNG TRÙNG DANH TÍNH)")
-        print("=" * 60)
+        print("\n" + "=" * 65)
+        print("📝 ĐĂNG KÝ HỒ SƠ HỌC SINH MỚI")
+        print("=" * 65)
         raw_name = input("👤 Họ và tên học sinh (VD: Nguyễn Duy Long, Phạm Dương): ").strip()
         if not raw_name:
             raw_name = "Nguyễn Duy Long"
@@ -125,27 +111,27 @@ async def main():
     grade_badge = f"[{student_profile.grade_level}]" if student_profile.grade_level else ""
     school_badge = f"- {student_profile.school}" if student_profile.school else ""
     print(f"\n👋 Đã đăng nhập: {student_profile.name} {grade_badge} {school_badge} (Mã ID: {student_profile.student_id})")
-    print("✨ Hệ thống Hồ sơ cá nhân hóa & Bộ nhớ đã sẵn sàng.\n")
+    print("✨ Hệ thống Hồ sơ cá nhân hóa & Evaluator Agent đã sẵn sàng.\n")
 
     while True:
-        print("\n--- MENU TRẢI NGHIỆM AI STUDY ASSISTANT ---")
-        print("1. Tạo bộ câu hỏi trắc nghiệm (Quiz) & Làm bài thử (Tự động lưu điểm)")
-        print("2. Tạo bộ thẻ ghi nhớ (Flashcards) (Tự động nạp vào hệ thống)")
-        print("3. Chat Đa tác tử thông minh (Multi-Agent: Tutor / Evaluator / Planner với Tools)")
-        print("4. Xem Hồ sơ & Dòng thời gian hoạt động (SQLite Database)")
+        print("\n" + "=" * 50)
+        print("--- MENU CHỨC NĂNG HỆ THỐNG ASAS ---")
+        print("=" * 50)
+        print("1. Tạo đề trắc nghiệm (Quiz) & Đánh giá lỗ hổng kiến thức với AI Agent")
+        print("2. Xem Hồ sơ & Lịch sử học tập (SQLite Database)")
         print("0. Thoát")
-        choice = input("\nChọn chức năng (0/1/2/3/4): ").strip()
+        choice = input("\nChọn chức năng (0/1/2): ").strip()
 
         if choice == "0":
             print("Tạm biệt! Hẹn gặp lại bạn.")
             break
 
         elif choice == "1":
-            topic = input("\nNhập chủ đề bạn muốn kiểm tra (VD: Python Basics, Transformer, Git): ").strip()
+            topic = input("\nNhập chủ đề bạn muốn kiểm tra (VD: Python Basics, Transformer, Lượng giác): ").strip()
             if not topic:
                 topic = "Python Basics"
 
-            print(f"\n⏳ Đang yêu cầu AI sinh Quiz về '{topic}', vui lòng chờ giây lát...")
+            print(f"\n⏳ Đang yêu cầu AI thiết kế bộ câu hỏi về '{topic}', vui lòng chờ giây lát...")
             try:
                 request = QuizGenerationRequest(
                     topic=topic,
@@ -169,154 +155,85 @@ async def main():
 
                 # Chấm điểm tự động
                 print("\n📊 ĐANG CHẤM ĐIỂM...")
-                result = quiz_service.grade_quiz(quiz=quiz, user_answers=user_answers)
-                print(f"👉 Điểm số: {result.correct_count}/{result.total_questions} ({result.score_percentage}%)")
+                grade_result = quiz_service.grade_quiz(quiz=quiz, user_answers=user_answers)
+                print(f"👉 Điểm số đạt được: {grade_result.correct_count}/{grade_result.total_questions} ({grade_result.score_percentage}%)")
 
-                # AI tạo lời nhận xét & định hướng cải thiện
-                print("⏳ AI đang phân tích bài giải, đưa ra lời khen ngợi và chỉ dẫn lỗi sai...")
-                mistakes = [
-                    f"Câu {d['question_index'] + 1} (Bạn chọn {d['user_answer']}, đáp án đúng là {d['correct_answer']})"
-                    for d in result.details if not d["is_correct"]
-                ]
-                feedback_prompt = (
-                    f"Học sinh {student_profile.name} vừa làm bài kiểm tra chủ đề '{quiz.topic}' đạt {result.score_percentage}% ({result.correct_count}/{result.total_questions} câu).\n"
-                    f"Các câu làm sai: {', '.join(mistakes) if mistakes else 'Không có (Làm đúng 100%)'}.\n"
-                    f"Hãy đưa ra nhận xét sư phạm ngắn gọn (tối đa 3-4 dòng):\n"
-                    f"- Lời khen ngợi động viên (1 câu)\n"
-                    f"- Nhận xét lỗi sai / Lỗ hổng kiến thức cần chú ý (1 câu)\n"
-                    f"- Hành động hoặc chủ đề cần ôn luyện tiếp theo (1 câu)"
-                )
+                # Kích hoạt EvaluatorAgent
+                print("\n🤖 ĐANG KÍCH HOẠT EVALUATOR AGENT ĐÁNH GIÁ LỖ HỔNG KIẾN THỨC...")
                 try:
-                    ai_feedback = await llm_client.chat_completion(
-                        messages=[{"role": "user", "content": feedback_prompt}],
-                        temperature=0.3,
+                    evaluation = await quiz_service.evaluate_quiz_with_agent(
+                        quiz=quiz,
+                        user_answers=user_answers,
+                        grade_result=grade_result,
+                        student_name=student_profile.name,
                     )
-                except Exception:
-                    ai_feedback = f"Em đã hoàn thành bài thi với kết quả {result.score_percentage}%! Hãy tiếp tục rèn luyện nhé."
 
-                print(f"\n🤖 [LỜI PHÊ & GÓP Ý CỦA AI]:\n{ai_feedback}")
+                    print("\n" + "=" * 65)
+                    print("📋 BẢNG ĐÁNH GIÁ SƯ PHẠM TỪ EVALUATOR AGENT")
+                    print("=" * 65)
 
-                # Lưu kết quả vào CSDL SQLite dài hạn
-                await memory_service.record_quiz_result(
-                    student_id=student_id,
-                    topic=quiz.topic,
-                    score_percentage=result.score_percentage,
-                    total_questions=result.total_questions,
-                    correct_count=result.correct_count,
-                    ai_critique=ai_feedback,
-                )
-                print("\n💾 [Memory] Đã tự động lưu kết quả bài thi và lời nhận xét của AI vào hồ sơ!")
+                    if evaluation.strengths:
+                        print("\n🌟 ĐIỂM MẠNH ĐÃ NẮM VỮNG:")
+                        for s in evaluation.strengths:
+                            print(f"   ✓ {s}")
 
+                    if evaluation.knowledge_gaps:
+                        print("\n🔍 LỖ HỔNG KIẾN THỨC & NGỘ NHẬN PHÁT HIỆN ĐƯỢC:")
+                        for gap in evaluation.knowledge_gaps:
+                            print(f"   ⚠️ {gap}")
+                    else:
+                        print("\n🔍 LỖ HỔNG KIẾN THỨC: Không phát hiện lỗ hổng lớn (Làm bài rất tốt)!")
+
+                    print(f"\n💬 NHẬN XÉT SƯ PHẠM CHI TIẾT:\n   {evaluation.critique}")
+
+                    if evaluation.recommendations:
+                        print("\n💡 LỜI KHUYÊN & CHỦ ĐỀ CẦN TẬP TRUNG ÔN TẬP:")
+                        for rec in evaluation.recommendations:
+                            print(f"   👉 {rec}")
+
+                    if evaluation.improvement_plan:
+                        print(f"\n🚀 KẾ HOẠCH HÀNH ĐỘNG CẢI THIỆN:\n   {evaluation.improvement_plan}")
+
+                    print("=" * 65)
+
+                    # Lưu kết quả vào CSDL SQLite
+                    praise_str = ", ".join(evaluation.strengths) if evaluation.strengths else None
+                    critique_str = evaluation.critique
+                    plan_str = evaluation.improvement_plan or (", ".join(evaluation.recommendations) if evaluation.recommendations else None)
+
+                    record_id = await memory_service.record_quiz_result(
+                        student_id=student_id,
+                        topic=quiz.topic,
+                        score_percentage=grade_result.score_percentage,
+                        total_questions=grade_result.total_questions,
+                        correct_count=grade_result.correct_count,
+                        ai_praise=praise_str,
+                        ai_critique=critique_str,
+                        improvement_plan=plan_str,
+                    )
+                    print(f"\n💾 [Memory] Đã lưu kết quả bài thi #{record_id} kèm phân tích của AI vào hồ sơ!")
+
+                except Exception as eval_err:
+                    print(f"⚠️ Không thể thực thi Evaluator Agent: {eval_err}")
+                    await memory_service.record_quiz_result(
+                        student_id=student_id,
+                        topic=quiz.topic,
+                        score_percentage=grade_result.score_percentage,
+                        total_questions=grade_result.total_questions,
+                        correct_count=grade_result.correct_count,
+                    )
+
+                # Hiển thị đáp án chi tiết
                 print("\nChi tiết đáp án & giải thích:")
-                for d in result.details:
-                    status = "✅ ĐÚNG" if d["is_correct"] else "❌ SAI"
-                    print(f"- Câu {d['question_index'] + 1}: {status} (Bạn chọn: {d['user_answer']} | Đáp án đúng: {d['correct_answer']})")
+                for d in grade_result.details:
+                    status_badge = "✅ ĐÚNG" if d["is_correct"] else "❌ SAI"
+                    print(f"- Câu {d['question_index'] + 1}: {status_badge} (Bạn chọn: {d['user_answer']} | Đáp án đúng: {d['correct_answer']})")
                     print(f"  💡 Giải thích: {d['explanation']}")
 
             except Exception as e:
-                print(f"❌ Lỗi khi tạo Quiz: {e}")
+                print(f"❌ Lỗi khi thực hiện Quiz: {e}")
 
         elif choice == "2":
-            topic = input("\nNhập chủ đề hoặc đoạn văn bản cần tạo Flashcard: ").strip()
-            if not topic:
-                topic = "Machine Learning Loss Functions"
-
-            print(f"\n⏳ Đang yêu cầu AI trích xuất Flashcards cho '{topic}'...")
-            try:
-                request = FlashcardGenerationRequest(
-                    content_or_topic=topic,
-                    num_cards=3,
-                    language="vi",
-                )
-                flashcards = await flashcard_service.generate_flashcards(request)
-
-                print(f"\n📌 BỘ THẺ: {flashcards.topic.upper()}")
-                for idx, card in enumerate(flashcards.cards):
-                    print(f"\n--- Thẻ {idx + 1} ---")
-                    print(f"❓ Mặt trước: {card.front}")
-                    print(f"💡 Gợi ý: {card.hint or 'Không có'}")
-                    input("👉 Nhấn Enter để xem đáp án...")
-                    print(f"✅ Mặt sau: {card.back}")
-                    print(f"🏷️  Tags: {', '.join(card.tags)}")
-
-                # Tự động nạp thẻ vào hệ thống CSDL
-                await memory_service.import_flashcard_set(student_id=student_id, card_set=flashcards)
-                print(f"\n💾 [Memory] Đã lưu {len(flashcards.cards)} thẻ vào hồ sơ của bạn!")
-
-            except Exception as e:
-                print(f"❌ Lỗi khi tạo Flashcards: {e}")
-
-        elif choice == "3":
-            print("\n" + "=" * 60)
-            print("🤖 HỆ THỐNG ĐA TÁC TỬ THÔNG MINH (MULTI-AGENT ORCHESTRATION)")
-            print("1. Supervisor: Phân tích câu hỏi & tự động điều phối chuyên gia.")
-            print("2. Tutor Agent: Giảng dạy Socratic & tự động gọi Tools tính toán/code/tra cứu.")
-            print("3. Evaluator Agent: Chấm điểm bài giải, phản biện logic & tìm lỗi sai.")
-            print("4. Planner Agent: Phân tích điểm yếu từ Memory để lên lộ trình học tập.")
-            print("Gõ 'exit' hoặc 'q' để quay lại menu chính.")
-            print("=" * 60 + "\n")
-
-            persistent_session_id = f"multiagent_{student_id}"
-            await memory_service.get_or_create_persistent_session(
-                session_id=persistent_session_id,
-                student_id=student_id,
-                title="Trao đổi Đa tác tử thông minh",
-            )
-            session = memory_service.get_or_create_session(
-                session_id=persistent_session_id,
-                max_messages=10,
-            )
-
-            while True:
-                prompt = input("\n👤 Bạn: ").strip()
-                if not prompt:
-                    continue
-                if prompt.lower() in ("exit", "q", "quit"):
-                    print("Quay lại menu chính...")
-                    break
-
-                session.add_message("user", prompt)
-                await memory_service.save_chat_message(
-                    session_id=persistent_session_id,
-                    role="user",
-                    content=prompt,
-                )
-
-                print("⏳ Supervisor đang phân tích câu hỏi và điều phối tới chuyên gia phù hợp...")
-                try:
-                    decision, response = await orchestrator.dispatch(
-                        messages=session.to_openai_messages(),
-                        student_id=student_id,
-                    )
-
-                    role_name = {
-                        "tutor": "GIA SƯ (TUTOR AGENT)",
-                        "evaluator": "GIÁM KHẢO (EVALUATOR AGENT)",
-                        "planner": "CỐ VẤN LỘ TRÌNH (PLANNER AGENT)",
-                    }.get(decision.next_agent.value, decision.next_agent.value.upper())
-
-                    print(f"\n🧭 [Supervisor điều phối]: -> Chuyển tới {role_name}")
-                    print(f"💡 [Lý do điều phối]: {decision.reasoning}")
-                    print(f"\n🤖 [{role_name}]:\n{response.content}")
-
-                    session.add_message("assistant", response.content)
-                    await memory_service.save_chat_message(
-                        session_id=persistent_session_id,
-                        role="assistant",
-                        content=response.content,
-                        agent_role=decision.next_agent.value,
-                    )
-
-                    # Ghi nhật ký tương tác
-                    await memory_service.log_activity(
-                        student_id=student_id,
-                        action_type="MULTI_AGENT_CHAT",
-                        description=f"Hỏi {role_name}: '{prompt[:30]}...'",
-                    )
-                except Exception as e:
-                    print(f"❌ Lỗi khi điều phối đa tác tử: {e}")
-
-        elif choice == "4":
             print("\n" + "=" * 65)
             print("📊 HỒ SƠ HỌC TẬP & DÒNG THỜI GIAN HOẠT ĐỘNG (SQLITE DATABASE)")
             print("=" * 65)
@@ -340,28 +257,17 @@ async def main():
             print(f"- Điểm trung bình: {stats['average_score']}%")
             print(f"- Tổng số câu làm đúng: {stats['total_correct']}/{stats['total_questions']}")
 
-            print("\n🕒 DÒNG THỜI GIAN HOẠT ĐỘNG GẦN NHẤT (10 hoạt động gần nhất):")
+            print("\n🕒 DÒNG THỜI GIAN HOẠT ĐỘNG GẦN NHẤT:")
             if not activities:
                 print("  (Chưa có hoạt động nào được ghi nhận)")
             else:
-                action_icons = {
-                    "QUIZ_COMPLETED": "🎯",
-                    "TOOL_CALCULATOR": "🧮",
-                    "TOOL_PYTHON_SANDBOX": "🐍",
-                    "TOOL_WEB_SEARCH": "🔍",
-                    "MULTI_AGENT_CHAT": "🤖",
-                    "CHAT_AGENT": "🤖",
-                    "FLASHCARDS_IMPORTED": "🧠",
-                    "FLASHCARD_REVIEWED": "🧠",
-                }
                 for idx, act in enumerate(activities, 1):
                     act_date = act.created_at.strftime("%Y-%m-%d %H:%M")
-                    icon = action_icons.get(act.action_type, "📝")
-                    print(f"  {idx}. [{act_date}] {icon} [{act.action_type}] {act.description}")
+                    print(f"  {idx}. [{act_date}] 🎯 [{act.action_type}] {act.description}")
 
             # Tra cứu chi tiết bài Quiz theo mã ID khi cần
             print("\n" + "-" * 65)
-            detail_choice = input("👉 Nhập mã bài thi (VD: 1 hoặc #1) để xem chi tiết nhận xét & lời phê AI (Enter để quay lại): ").strip()
+            detail_choice = input("👉 Nhập mã bài thi (VD: 1 hoặc #1) để xem lại phân tích lỗi sai từ AI (Enter để quay lại): ").strip()
             if detail_choice:
                 clean_id = detail_choice.lstrip("#")
                 if clean_id.isdigit():
@@ -375,7 +281,7 @@ async def main():
                         print(f"📅 Thời gian hoàn thành: {date_str}")
                         print(f"🎯 Điểm số: {target_quiz.score_percentage}% ({target_quiz.correct_count}/{target_quiz.total_questions} câu)")
                         if target_quiz.ai_praise:
-                            print(f"\n🌟 Lời khen ngợi từ AI:\n   {target_quiz.ai_praise}")
+                            print(f"\n🌟 Điểm mạnh ghi nhận:\n   {target_quiz.ai_praise}")
                         if target_quiz.ai_critique:
                             print(f"\n💬 Nhận xét sư phạm & Góp ý từ AI:\n   {target_quiz.ai_critique}")
                         if target_quiz.improvement_plan:

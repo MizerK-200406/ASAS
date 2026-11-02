@@ -5,12 +5,10 @@ from typing import Any, Dict, List, Optional
 import uuid
 from loguru import logger
 
-from asas.modules.flashcard.schemas import FlashcardSet
 from asas.modules.memory.repository import MemoryRepository
 from asas.modules.memory.schemas import (
     ChatMessageRecord,
     ChatSessionRecord,
-    FlashcardProgress,
     QuizRecord,
     StudentActivityLog,
     StudentProfile,
@@ -154,52 +152,6 @@ class MemoryService:
             "recent_activities": recent_activities,
         }
 
-    # -------------------------------------------------------------
-    # 3. Quản lý Flashcard
-    # -------------------------------------------------------------
-
-    async def import_flashcard_set(
-        self,
-        student_id: str,
-        card_set: FlashcardSet,
-    ) -> List[FlashcardProgress]:
-        """Nạp toàn bộ thẻ từ một FlashcardSet vào CSDL của học sinh."""
-        saved_cards: List[FlashcardProgress] = []
-        for card_item in card_set.cards:
-            card_id = f"card_{uuid.uuid4().hex[:8]}"
-            progress = FlashcardProgress(
-                card_id=card_id,
-                student_id=student_id,
-                front=card_item.front,
-                back=card_item.back,
-            )
-            saved = await self.repository.save_flashcard_progress(progress)
-            saved_cards.append(saved)
-
-        logger.info(f"Đã nạp thành công {len(saved_cards)} thẻ cho học sinh {student_id}")
-
-        # Tự động ghi nhật ký hoạt động
-        await self.repository.log_student_activity(
-            student_id=student_id,
-            action_type="FLASHCARDS_IMPORTED",
-            description=f"Nạp {len(saved_cards)} thẻ ghi nhớ cho chủ đề '{card_set.topic}'",
-        )
-        return saved_cards
-
-    async def get_student_flashcards(
-        self,
-        student_id: str,
-        limit: int = 50,
-    ) -> List[FlashcardProgress]:
-        """Lấy danh sách các thẻ Flashcard của học sinh."""
-        return await self.repository.get_student_flashcards(
-            student_id=student_id,
-            limit=limit,
-        )
-
-    async def get_flashcard(self, card_id: str) -> Optional[FlashcardProgress]:
-        """Lấy thông tin chi tiết một Flashcard theo card_id."""
-        return await self.repository.get_flashcard(card_id)
 
     # -------------------------------------------------------------
     # 4. Quản lý Nhật ký hoạt động (Activity Logs)

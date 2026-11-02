@@ -9,7 +9,6 @@ from asas.modules.memory.db import get_db_connection, init_db, init_user_db, ini
 from asas.modules.memory.schemas import (
     ChatMessageRecord,
     ChatSessionRecord,
-    FlashcardProgress,
     QuizRecord,
     StudentActivityLog,
     StudentProfile,
@@ -269,76 +268,6 @@ class MemoryRepository:
                     "total_correct": row["total_correct"] or 0,
                 }
 
-    # -------------------------------------------------------------
-    # 3. Flashcard Storage
-    # -------------------------------------------------------------
-
-    async def save_flashcard_progress(self, card: FlashcardProgress) -> FlashcardProgress:
-        """Lưu hoặc cập nhật thông tin của một Flashcard."""
-        async with get_db_connection(self.db_path) as db:
-            await db.execute(
-                """INSERT INTO flashcard_progress
-                   (card_id, student_id, front, back, created_at)
-                   VALUES (?, ?, ?, ?, ?)
-                   ON CONFLICT(card_id) DO UPDATE SET
-                       front=excluded.front,
-                       back=excluded.back,
-                       created_at=excluded.created_at""",
-                (
-                    card.card_id,
-                    card.student_id,
-                    card.front,
-                    card.back,
-                    card.created_at.isoformat(),
-                ),
-            )
-            await db.commit()
-            return card
-
-    async def get_flashcard(self, card_id: str) -> Optional[FlashcardProgress]:
-        """Lấy thông tin chi tiết một Flashcard theo card_id."""
-        async with get_db_connection(self.db_path) as db:
-            db.row_factory = aiosqlite.Row
-            async with db.execute(
-                "SELECT * FROM flashcard_progress WHERE card_id = ?", (card_id,)
-            ) as cursor:
-                row = await cursor.fetchone()
-                if not row:
-                    return None
-                return FlashcardProgress(
-                    card_id=row["card_id"],
-                    student_id=row["student_id"],
-                    front=row["front"],
-                    back=row["back"],
-                    created_at=datetime.fromisoformat(row["created_at"]),
-                )
-
-    async def get_student_flashcards(
-        self,
-        student_id: str,
-        limit: int = 50,
-    ) -> List[FlashcardProgress]:
-        """Lấy danh sách các thẻ Flashcard của học sinh."""
-        async with get_db_connection(self.db_path) as db:
-            db.row_factory = aiosqlite.Row
-            async with db.execute(
-                """SELECT * FROM flashcard_progress
-                   WHERE student_id = ?
-                   ORDER BY created_at DESC
-                   LIMIT ?""",
-                (student_id, limit),
-            ) as cursor:
-                rows = await cursor.fetchall()
-                return [
-                    FlashcardProgress(
-                        card_id=row["card_id"],
-                        student_id=row["student_id"],
-                        front=row["front"],
-                        back=row["back"],
-                        created_at=datetime.fromisoformat(row["created_at"]),
-                    )
-                    for row in rows
-                ]
 
     # -------------------------------------------------------------
     # 4. Student Activity Logs

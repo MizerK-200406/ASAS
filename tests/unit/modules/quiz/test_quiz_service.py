@@ -124,3 +124,21 @@ def test_grade_quiz_partial_correct(sample_quiz):
     assert result.details[1]["is_correct"] is False
     assert result.details[1]["user_answer"] == "B"
     assert result.details[1]["correct_answer"] == "C"
+
+
+@pytest.mark.asyncio
+async def test_evaluate_quiz_with_agent(sample_quiz):
+    """Test evaluate_quiz_with_agent delegates to EvaluatorAgent."""
+    mock_evaluator = MagicMock()
+    mock_evaluator.evaluate_quiz = AsyncMock(return_value="mock_eval_result")
+    service = QuizService(evaluator_agent=mock_evaluator)
+
+    result = await service.evaluate_quiz_with_agent(
+        quiz=sample_quiz,
+        user_answers={0: "A"},
+        grade_result=QuizGradeResult(total_questions=1, correct_count=1, score_percentage=100.0, details=[]),
+        student_name="Student",
+    )
+    assert result == "mock_eval_result"
+    mock_evaluator.evaluate_quiz.assert_called_once()
+

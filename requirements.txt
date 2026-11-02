@@ -12,9 +12,6 @@ aiosqlite>=0.20.0
 # LLM Provider (NVIDIA NIM is OpenAI-compatible)
 openai>=1.30.0
 
-# Free External Tools
-ddgs>=9.0.0
-duckduckgo-search>=6.0.0
 
 # Observability & Logging
 loguru>=0.7.2

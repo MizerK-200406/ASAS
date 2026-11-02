@@ -7,7 +7,7 @@ from asas.modules.memory.db import init_db, get_db_connection
 
 @pytest.mark.asyncio
 async def test_init_db_in_memory_creates_tables():
-    """Kiểm tra init_db() tạo thành công 3 bảng trong CSDL in-memory."""
+    """Kiểm tra init_db() tạo thành công các bảng trong CSDL in-memory."""
     async with aiosqlite.connect(":memory:") as db:
         await init_db(db)
 
@@ -27,15 +27,7 @@ async def test_init_db_in_memory_creates_tables():
             assert row is not None
             assert row[0] == "quiz_records"
 
-        # Kiểm tra bảng flashcard_progress
-        async with db.execute(
-            "SELECT name FROM sqlite_master WHERE type='table' AND name='flashcard_progress'"
-        ) as cursor:
-            row = await cursor.fetchone()
-            assert row is not None
-            assert row[0] == "flashcard_progress"
-
-        # Kiểm tra bảng mới student_activity_logs
+        # Kiểm tra bảng student_activity_logs
         async with db.execute(
             "SELECT name FROM sqlite_master WHERE type='table' AND name='student_activity_logs'"
         ) as cursor:
@@ -71,8 +63,6 @@ async def test_init_db_in_memory_creates_tables():
                 assert col in columns
 
 
-
-
 @pytest.mark.asyncio
 async def test_foreign_keys_and_schema_constraints():
     """Kiểm tra ràng buộc khóa ngoại (foreign key) hoạt động chính xác."""
@@ -102,7 +92,6 @@ async def test_init_user_db_and_chat_db_independently():
             tables = [r[0] for r in await cursor.fetchall()]
             assert "students" in tables
             assert "quiz_records" in tables
-            assert "flashcard_progress" in tables
             assert "student_activity_logs" in tables
             assert "chat_sessions" not in tables
             assert "chat_messages" not in tables
@@ -116,4 +105,3 @@ async def test_init_user_db_and_chat_db_independently():
             assert "chat_messages" in tables
             assert "students" not in tables
             assert "quiz_records" not in tables
-
