@@ -122,7 +122,7 @@ class LLMClient:
         try:
             response = await self.client.chat.completions.create(
                 model=target_model,
-                messages=messages,
+                messages=messages,  # type: ignore[arg-type]
                 temperature=temperature,
                 max_tokens=max_tokens,
             )
@@ -185,7 +185,7 @@ class LLMClient:
             # một số phiên bản DeepSeek Reasoning (Flash/R1) sẽ đẩy toàn bộ nội dung vào reasoning_content và để content=None.
             response = await self.client.chat.completions.create(
                 model=target_model,
-                messages=formatted_messages,
+                messages=formatted_messages,  # type: ignore[arg-type]
                 temperature=temperature,
                 max_tokens=max_tokens,
             )

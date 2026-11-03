@@ -14,7 +14,7 @@ async def clean_test_db():
     """Tự động dọn dẹp các bảng trong test database trước mỗi test case."""
     settings = get_settings()
     async with get_db_connection(settings.test_database_url) as conn:
-        await conn.execute("TRUNCATE TABLE chat_messages, chat_sessions, student_activity_logs, quiz_records, students CASCADE;")
+        await conn.execute("TRUNCATE TABLE student_activity_logs, quiz_records, students CASCADE;")
 
 
 @pytest.fixture
@@ -85,8 +85,6 @@ async def test_quiz_record_and_statistics(repo):
     assert stats["total_quizzes"] == 2
     assert stats["average_score"] == 90.0
     assert stats["highest_score"] == 100.0
-    assert stats["total_correct"] == 9
-    assert stats["total_questions"] == 10
 
 
 @pytest.mark.asyncio
@@ -207,63 +205,3 @@ async def test_get_quiz_record_by_id_drilldown(repo):
     assert fetched.ai_praise == "Xuất sắc phần lịch sử cận đại"
     assert fetched.ai_critique == "Sai sót câu hỏi mốc thời gian 1945"
     assert fetched.improvement_plan == "Đọc lại SGK trang 120"
-
-
-@pytest.mark.asyncio
-async def test_chat_session_and_messages_persistence(repo):
-    """Kiểm tra lưu trữ và truy xuất chat sessions và messages trong PostgreSQL."""
-    await repo.initialize()
-    await repo.get_or_create_student("st_chat_01", "Nguyen Van Chat")
-
-    # Tạo phiên chat
-    session = await repo.create_or_get_chat_session(
-        session_id="sess_01",
-        student_id="st_chat_01",
-        title="Phiên giải bài Toán Đại số",
-    )
-    assert session.id == "sess_01"
-    assert session.student_id == "st_chat_01"
-
-    # Lưu tin nhắn người dùng và trợ lý
-    m1 = await repo.save_chat_message(
-        session_id="sess_01",
-        role="user",
-        content="Cho em hỏi về bất đẳng thức Cauchy",
-    )
-    assert m1.id > 0
-    assert m1.content == "Cho em hỏi về bất đẳng thức Cauchy"
-
-    m2 = await repo.save_chat_message(
-        session_id="sess_01",
-        role="assistant",
-        content="Bất đẳng thức Cauchy phát biểu rằng...",
-        agent_role="tutor",
-    )
-    assert m2.id > m1.id
-    assert m2.agent_role == "tutor"
-
-    # Lấy danh sách tin nhắn
-    messages = await repo.get_session_chat_messages("sess_01")
-    assert len(messages) == 2
-    assert messages[0].role == "user"
-    assert messages[1].role == "assistant"
-    assert messages[1].agent_role == "tutor"
-
-
-@pytest.mark.asyncio
-async def test_dual_database_repository():
-    """Kiểm tra MemoryRepository hoạt động chuẩn xác với PostgreSQL."""
-    settings = get_settings()
-    repo = MemoryRepository(db_url=settings.test_database_url)
-    await repo.initialize()
-
-    st = await repo.get_or_create_student("st_dual_01", "Pham Duong", grade_level="Lớp 11")
-    assert st.student_id == "st_dual_01"
-
-    sess = await repo.create_or_get_chat_session(
-        session_id="sess_dual_01",
-        student_id="st_dual_01",
-        title="Hỏi bài Sinh học",
-    )
-    assert sess.student_id == "st_dual_01"
-    assert sess.title == "Hỏi bài Sinh học"

@@ -1,4 +1,4 @@
-"""Unit tests for memory schemas and SM-2 data models."""
+"""Unit tests for memory schemas and data models."""
 
 from datetime import datetime, timezone
 import pytest
@@ -9,6 +9,7 @@ from asas.modules.memory.schemas import (
     MessageRole,
     QuizRecord,
     StudentProfile,
+    StudentActivityLog,
 )
 
 
@@ -83,8 +84,6 @@ def test_quiz_record_with_ai_feedback():
 
 def test_student_activity_log_schema():
     """Kiểm tra StudentActivityLog lưu lại vết hành động học sinh."""
-    from asas.modules.memory.schemas import StudentActivityLog
-
     log = StudentActivityLog(
         id="act_123",
         student_id="st_01",
@@ -96,33 +95,3 @@ def test_student_activity_log_schema():
     assert log.action_type == "QUIZ_TAKEN"
     assert log.description == "Hoàn thành bài kiểm tra Lượng giác đạt 66.7%"
     assert isinstance(log.created_at, datetime)
-
-
-def test_chat_session_and_message_records():
-    """Kiểm tra ChatSessionRecord và ChatMessageRecord lưu trữ phiên và tin nhắn bền vững."""
-    from asas.modules.memory.schemas import ChatSessionRecord, ChatMessageRecord
-
-    session = ChatSessionRecord(
-        id="sess_abc",
-        student_id="st_01",
-        title="Thảo luận Giải tích và Đạo hàm",
-    )
-    assert session.id == "sess_abc"
-    assert session.student_id == "st_01"
-    assert session.title == "Thảo luận Giải tích và Đạo hàm"
-    assert isinstance(session.created_at, datetime)
-
-    msg = ChatMessageRecord(
-        id=1,
-        session_id="sess_abc",
-        role="assistant",
-        content="Đạo hàm của sin(x) là cos(x).",
-        agent_role="tutor",
-    )
-    assert msg.id == 1
-    assert msg.session_id == "sess_abc"
-    assert msg.role == "assistant"
-    assert msg.agent_role == "tutor"
-    assert isinstance(msg.created_at, datetime)
-
-

@@ -8,8 +8,6 @@ import uuid
 from asas.core.config import get_settings
 from asas.modules.memory.db import get_db_connection, init_db
 from asas.modules.memory.schemas import (
-    ChatMessageRecord,
-    ChatSessionRecord,
     QuizRecord,
     StudentActivityLog,
     StudentProfile,
@@ -111,6 +109,28 @@ class MemoryRepository:
                 learning_style=learning_style,
                 created_at=now,
                 updated_at=now,
+            )
+
+    async def get_student_profile(self, student_id: str) -> Optional[StudentProfile]:
+        """Lấy thông tin học sinh theo ID, trả về None nếu không tồn tại."""
+        async with get_db_connection(self.db_url) as conn:
+            row = await conn.fetchrow(
+                "SELECT * FROM students WHERE student_id = $1", student_id
+            )
+            if not row:
+                return None
+            raw_subjects = row["target_subjects"]
+            parsed_subjects = json.loads(raw_subjects) if isinstance(raw_subjects, str) else list(raw_subjects)
+            return StudentProfile(
+                student_id=row["student_id"],
+                name=row["name"],
+                grade_level=row["grade_level"],
+                school=row["school"],
+                target_subjects=parsed_subjects,
+                target_goal=row["target_goal"],
+                learning_style=row["learning_style"],
+                created_at=_to_datetime(row["created_at"]),
+                updated_at=_to_datetime(row["updated_at"]),
             )
 
     async def update_student_profile(self, profile: StudentProfile) -> StudentProfile:
@@ -331,148 +351,6 @@ class MemoryRepository:
                     student_id=r["student_id"],
                     action_type=r["action_type"],
                     description=r["description"],
-                    created_at=_to_datetime(r["created_at"]),
-                )
-                for r in rows
-            ]
-
-    # -------------------------------------------------------------
-    # 4. Chat History (Lưu trữ mở rộng)
-    # -------------------------------------------------------------
-
-    async def create_or_get_chat_session(
-        self,
-        session_id: str,
-        student_id: str,
-        title: Optional[str] = None,
-    ) -> ChatSessionRecord:
-        """Tạo hoặc lấy phiên hội thoại của học sinh."""
-        now = utc_now()
-        async with get_db_connection(self.db_url) as conn:
-            if session_id:
-                row = await conn.fetchrow(
-                    "SELECT * FROM chat_sessions WHERE id = $1 AND student_id = $2",
-                    session_id,
-                    student_id,
-                )
-                if row:
-                    return ChatSessionRecord(
-                        id=row["id"],
-                        student_id=row["student_id"],
-                        title=row["title"],
-                        created_at=_to_datetime(row["created_at"]),
-                        updated_at=_to_datetime(row["updated_at"]),
-                    )
-
-            target_id = session_id or str(uuid.uuid4())
-            session_title = title or f"Hội thoại ngày {now.strftime('%d/%m/%Y')}"
-            await conn.execute(
-                """
-                INSERT INTO chat_sessions (id, student_id, title, created_at, updated_at)
-                VALUES ($1, $2, $3, $4, $5)
-                """,
-                target_id,
-                student_id,
-                session_title,
-                now,
-                now,
-            )
-            return ChatSessionRecord(
-                id=target_id,
-                student_id=student_id,
-                title=session_title,
-                created_at=now,
-                updated_at=now,
-            )
-
-    async def get_student_chat_sessions(
-        self,
-        student_id: str,
-        limit: int = 10,
-    ) -> List[ChatSessionRecord]:
-        """Lấy danh sách các phiên chat của học sinh."""
-        async with get_db_connection(self.db_url) as conn:
-            rows = await conn.fetch(
-                """
-                SELECT * FROM chat_sessions
-                WHERE student_id = $1
-                ORDER BY updated_at DESC
-                LIMIT $2
-                """,
-                student_id,
-                limit,
-            )
-            return [
-                ChatSessionRecord(
-                    id=r["id"],
-                    student_id=r["student_id"],
-                    title=r["title"],
-                    created_at=_to_datetime(r["created_at"]),
-                    updated_at=_to_datetime(r["updated_at"]),
-                )
-                for r in rows
-            ]
-
-    async def save_chat_message(
-        self,
-        session_id: str,
-        role: str,
-        content: str,
-        agent_role: Optional[str] = None,
-    ) -> ChatMessageRecord:
-        """Lưu một tin nhắn vào phiên hội thoại."""
-        now = utc_now()
-        async with get_db_connection(self.db_url) as conn:
-            msg_id = await conn.fetchval(
-                """
-                INSERT INTO chat_messages (session_id, role, content, agent_role, created_at)
-                VALUES ($1, $2, $3, $4, $5)
-                RETURNING id
-                """,
-                session_id,
-                role,
-                content,
-                agent_role,
-                now,
-            )
-            await conn.execute(
-                "UPDATE chat_sessions SET updated_at = $1 WHERE id = $2",
-                now,
-                session_id,
-            )
-            return ChatMessageRecord(
-                id=int(msg_id),
-                session_id=session_id,
-                role=role,
-                content=content,
-                agent_role=agent_role,
-                created_at=now,
-            )
-
-    async def get_session_chat_messages(
-        self,
-        session_id: str,
-        limit: int = 50,
-    ) -> List[ChatMessageRecord]:
-        """Lấy danh sách tin nhắn trong một phiên hội thoại."""
-        async with get_db_connection(self.db_url) as conn:
-            rows = await conn.fetch(
-                """
-                SELECT * FROM chat_messages
-                WHERE session_id = $1
-                ORDER BY id ASC
-                LIMIT $2
-                """,
-                session_id,
-                limit,
-            )
-            return [
-                ChatMessageRecord(
-                    id=r["id"],
-                    session_id=r["session_id"],
-                    role=r["role"],
-                    content=r["content"],
-                    agent_role=r["agent_role"],
                     created_at=_to_datetime(r["created_at"]),
                 )
                 for r in rows

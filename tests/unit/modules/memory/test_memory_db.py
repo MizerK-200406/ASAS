@@ -26,8 +26,8 @@ async def test_init_db_creates_tables(test_dsn):
         assert "students" in tables
         assert "quiz_records" in tables
         assert "student_activity_logs" in tables
-        assert "chat_sessions" in tables
-        assert "chat_messages" in tables
+        assert "chat_sessions" not in tables
+        assert "chat_messages" not in tables
 
         # Kiểm tra các cột mở rộng của students
         col_rows = await conn.fetch(

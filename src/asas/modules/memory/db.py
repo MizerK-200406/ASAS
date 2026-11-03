@@ -42,33 +42,13 @@ CREATE TABLE IF NOT EXISTS student_activity_logs (
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
-CREATE TABLE IF NOT EXISTS chat_sessions (
-    id VARCHAR(64) PRIMARY KEY,
-    student_id VARCHAR(64) NOT NULL REFERENCES students(student_id) ON DELETE CASCADE,
-    title VARCHAR(255) NOT NULL,
-    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-);
-
-CREATE TABLE IF NOT EXISTS chat_messages (
-    id SERIAL PRIMARY KEY,
-    session_id VARCHAR(64) NOT NULL REFERENCES chat_sessions(id) ON DELETE CASCADE,
-    role VARCHAR(50) NOT NULL,
-    content TEXT NOT NULL,
-    agent_role VARCHAR(50),
-    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-);
-
 CREATE INDEX IF NOT EXISTS idx_quiz_records_student ON quiz_records(student_id);
 CREATE INDEX IF NOT EXISTS idx_activity_logs_student ON student_activity_logs(student_id);
-CREATE INDEX IF NOT EXISTS idx_chat_sessions_student ON chat_sessions(student_id);
-CREATE INDEX IF NOT EXISTS idx_chat_messages_session ON chat_messages(session_id);
 """
 
 # Alias schema SQL
 SCHEMA_SQL = POSTGRES_SCHEMA_SQL
 USER_SCHEMA_SQL = POSTGRES_SCHEMA_SQL
-CHAT_SCHEMA_SQL = POSTGRES_SCHEMA_SQL
 
 
 class DatabasePool:
@@ -120,10 +100,6 @@ async def init_db(target: Union[asyncpg.Connection, asyncpg.Pool, str]) -> None:
 
 
 async def init_user_db(target: Union[asyncpg.Connection, asyncpg.Pool, str]) -> None:
-    await init_db(target)
-
-
-async def init_chat_db(target: Union[asyncpg.Connection, asyncpg.Pool, str]) -> None:
     await init_db(target)
 
 

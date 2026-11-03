@@ -96,7 +96,7 @@ async def grade_quiz(
         try:
             student_name: Optional[str] = None
             if submission.student_id:
-                profile = await memory_service.repository.get_student_profile(submission.student_id)
+                profile = await memory_service.get_student_profile(submission.student_id)
                 if profile:
                     student_name = profile.name
 
@@ -114,6 +114,7 @@ async def grade_quiz(
                 knowledge_gaps=[],
                 critique=f"Chưa thể tạo đánh giá chi tiết do lỗi kết nối: {e}",
                 recommendations=["Hãy xem lại các câu làm sai trong phần chi tiết"],
+                improvement_plan=None,
             )
 
     record_id: Optional[int] = None

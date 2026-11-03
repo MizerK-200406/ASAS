@@ -12,7 +12,10 @@ Nhiệm vụ cốt lõi của bạn:
 1. Đánh giá bài làm của học sinh một cách khách quan, mang tính xây dựng và sư phạm sâu sắc.
 2. Xác định chính xác các LỖ HỔNG KIẾN THỨC (Knowledge Gaps), ngộ nhận khái niệm, hoặc sai sót trong tư duy logic.
 3. Chỉ ra rõ ràng các ĐIỂM MẠNH (Strengths) đối với các phần học sinh đã làm tốt để khích lệ tinh thần.
-4. Đưa ra LỜI KHUYÊN (Recommendations) thiết thực và KẾ HOẠCH HÀNH ĐỘNG (Improvement Plan) từng bước giúp học sinh bồi đắp kiến thức còn thiếu."""
+4. Đưa ra LỜI KHUYÊN (Recommendations) thiết thực và KẾ HOẠCH HÀNH ĐỘNG (Improvement Plan) từng bước giúp học sinh bồi đắp kiến thức còn thiếu.
+
+QUY TẮC ĐẶC BIỆT:
+- Nếu học sinh trả lời đúng 100% số câu hỏi, KHÔNG đưa ra lời khuyên (recommendations = []) và KHÔNG xem xét lỗ hổng kiến thức (knowledge_gaps = [], improvement_plan = null). Chỉ cần ghi nhận điểm mạnh và đưa ra lời khen ngợi sư phạm."""
 
 
 class EvaluatorAgent:
@@ -56,6 +59,28 @@ class EvaluatorAgent:
     ) -> EvaluationResult:
         """Chuyên biệt: Phân tích bài thi trắc nghiệm để phát hiện lỗ hổng kiến thức và đưa ra lời khuyên."""
         name = student_name or "Học sinh"
+
+        # Nếu học sinh đúng 100% câu trả lời: không cần đưa ra lời khuyên hay tìm lỗ hổng kiến thức
+        if grade_result.total_questions > 0 and grade_result.correct_count == grade_result.total_questions:
+            logger.info(
+                f"[EvaluatorAgent] Học sinh '{name}' đạt điểm tối đa 100% "
+                f"({grade_result.correct_count}/{grade_result.total_questions}). "
+                "Bỏ qua phân tích lỗ hổng kiến thức và lời khuyên."
+            )
+            return EvaluationResult(
+                score_summary=f"Tuyệt đối 100% ({grade_result.correct_count}/{grade_result.total_questions} câu)",
+                strengths=[
+                    f"Nắm vững toàn bộ kiến thức chủ đề '{quiz.topic}'",
+                    "Trả lời chính xác 100% tất cả các câu hỏi trong bài kiểm tra",
+                ],
+                knowledge_gaps=[],
+                critique=(
+                    f"Học sinh {name} đã hoàn thành xuất sắc bài kiểm tra với kết quả chính xác 100%. "
+                    "Không phát hiện lỗ hổng kiến thức hay sai sót nào trong toàn bộ bài làm."
+                ),
+                recommendations=[],
+                improvement_plan=None,
+            )
 
         # Tổng hợp các câu làm sai và câu làm đúng
         correct_items = []

@@ -182,7 +182,7 @@ async def main():
                         for gap in evaluation.knowledge_gaps:
                             print(f"   ⚠️ {gap}")
                     else:
-                        print("\n🔍 LỖ HỔNG KIẾN THỨC: Không phát hiện lỗ hổng lớn (Làm bài rất tốt)!")
+                        print("\n🔍 LỖ HỔNG KIẾN THỨC: Không có lỗ hổng kiến thức!")
 
                     print(f"\n💬 NHẬN XÉT SƯ PHẠM CHI TIẾT:\n   {evaluation.critique}")
 
@@ -190,13 +190,15 @@ async def main():
                         print("\n💡 LỜI KHUYÊN & CHỦ ĐỀ CẦN TẬP TRUNG ÔN TẬP:")
                         for rec in evaluation.recommendations:
                             print(f"   👉 {rec}")
+                    else:
+                        print("\n💡 LỜI KHUYÊN: Bạn đã làm đúng 100%, hãy tiếp tục duy trì phong độ xuất sắc này!")
 
                     if evaluation.improvement_plan:
                         print(f"\n🚀 KẾ HOẠCH HÀNH ĐỘNG CẢI THIỆN:\n   {evaluation.improvement_plan}")
 
                     print("=" * 65)
 
-                    # Lưu kết quả vào CSDL SQLite
+                    # Lưu kết quả vào CSDL PostgreSQL
                     praise_str = ", ".join(evaluation.strengths) if evaluation.strengths else None
                     critique_str = evaluation.critique
                     plan_str = evaluation.improvement_plan or (", ".join(evaluation.recommendations) if evaluation.recommendations else None)

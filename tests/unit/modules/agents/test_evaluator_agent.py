@@ -102,3 +102,58 @@ async def test_evaluator_agent_evaluate_quiz(mock_llm_client, sample_evaluation_
     assert "Python" in user_prompt
     assert "50.0%" in user_prompt
     assert "Tuple là immutable" in user_prompt
+
+
+@pytest.mark.asyncio
+async def test_evaluator_agent_evaluate_quiz_perfect_score(mock_llm_client):
+    """Kiểm tra khi học sinh làm đúng 100%, không đưa ra lời khuyên hay lỗ hổng kiến thức và không cần gọi LLM."""
+    evaluator = EvaluatorAgent(llm_client=mock_llm_client)
+
+    quiz = Quiz(
+        title="Python Basics Quiz",
+        topic="Python",
+        questions=[
+            QuizQuestion(
+                question="List có thể thay đổi không?",
+                options=[QuizOption(id="A", text="Có"), QuizOption(id="B", text="Không")],
+                correct_answer_id="A",
+                explanation="List là mutable",
+            ),
+            QuizQuestion(
+                question="Tuple có thể thay đổi không?",
+                options=[QuizOption(id="A", text="Có"), QuizOption(id="B", text="Không")],
+                correct_answer_id="B",
+                explanation="Tuple là immutable",
+            ),
+        ],
+    )
+
+    grade_result = QuizGradeResult(
+        total_questions=2,
+        correct_count=2,
+        score_percentage=100.0,
+        details=[
+            {"question_index": 0, "is_correct": True, "user_answer": "A", "correct_answer": "A", "explanation": "List là mutable"},
+            {"question_index": 1, "is_correct": True, "user_answer": "B", "correct_answer": "B", "explanation": "Tuple là immutable"},
+        ],
+    )
+
+    result = await evaluator.evaluate_quiz(
+        quiz=quiz,
+        user_answers={0: "A", 1: "B"},
+        grade_result=grade_result,
+        student_name="Nguyen Van A",
+    )
+
+    # Đảm bảo không có lỗ hổng kiến thức và không có lời khuyên
+    assert result.knowledge_gaps == []
+    assert result.recommendations == []
+    assert result.improvement_plan is None
+
+    # Điểm mạnh và lời khen ngợi vẫn đầy đủ
+    assert len(result.strengths) > 0
+    assert "xuất sắc" in result.critique
+    assert "Nguyen Van A" in result.critique
+
+    # Quan trọng: Không cần tốn token/gọi LLM khi đã đạt 100%
+    assert not mock_llm_client.structured_output.called

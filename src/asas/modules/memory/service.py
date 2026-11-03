@@ -7,8 +7,6 @@ from loguru import logger
 
 from asas.modules.memory.repository import MemoryRepository
 from asas.modules.memory.schemas import (
-    ChatMessageRecord,
-    ChatSessionRecord,
     QuizRecord,
     StudentActivityLog,
     StudentProfile,
@@ -88,6 +86,10 @@ class MemoryService:
             learning_style=learning_style,
         )
 
+    async def get_student_profile(self, student_id: str) -> Optional[StudentProfile]:
+        """Lấy thông tin học sinh theo ID."""
+        return await self.repository.get_student_profile(student_id)
+
     async def update_student_profile(self, profile: StudentProfile) -> StudentProfile:
         """Cập nhật thông tin chi tiết hồ sơ học sinh."""
         return await self.repository.update_student_profile(profile)
@@ -99,6 +101,17 @@ class MemoryService:
     async def get_quiz_record_by_id(self, quiz_id: int) -> Optional[QuizRecord]:
         """Lấy chi tiết một bài quiz theo ID (Master-Detail pattern)."""
         return await self.repository.get_quiz_record_by_id(quiz_id)
+
+    async def get_quiz_history(
+        self,
+        student_id: str,
+        limit: int = 10,
+    ) -> List[QuizRecord]:
+        """Lấy lịch sử làm bài trắc nghiệm của học sinh."""
+        return await self.repository.get_quiz_history(
+            student_id=student_id,
+            limit=limit,
+        )
 
 
     async def record_quiz_result(
@@ -182,58 +195,3 @@ class MemoryService:
             student_id=student_id,
             limit=limit,
         )
-
-    # -------------------------------------------------------------
-    # 5. Quản lý Phiên & Tin nhắn Chat Bền vững (Persistent Chat)
-    # -------------------------------------------------------------
-
-    async def get_or_create_persistent_session(
-        self,
-        session_id: str,
-        student_id: str,
-        title: str = "Hội thoại học tập",
-    ) -> ChatSessionRecord:
-        """Lấy hoặc tạo mới phiên hội thoại lưu trong SQLite."""
-        return await self.repository.create_or_get_chat_session(
-            session_id=session_id,
-            student_id=student_id,
-            title=title,
-        )
-
-    async def get_student_chat_sessions(
-        self,
-        student_id: str,
-        limit: int = 20,
-    ) -> List[ChatSessionRecord]:
-        """Lấy danh sách các phiên chat của học sinh (phục vụ sidebar trên Web)."""
-        return await self.repository.get_student_chat_sessions(
-            student_id=student_id,
-            limit=limit,
-        )
-
-    async def save_chat_message(
-        self,
-        session_id: str,
-        role: str,
-        content: str,
-        agent_role: Optional[str] = None,
-    ) -> ChatMessageRecord:
-        """Lưu bền vững một tin nhắn vào CSDL SQLite."""
-        return await self.repository.save_chat_message(
-            session_id=session_id,
-            role=role,
-            content=content,
-            agent_role=agent_role,
-        )
-
-    async def get_session_chat_messages(
-        self,
-        session_id: str,
-        limit: int = 50,
-    ) -> List[ChatMessageRecord]:
-        """Lấy toàn bộ lịch sử tin nhắn của một phiên chat theo thứ tự thời gian."""
-        return await self.repository.get_session_chat_messages(
-            session_id=session_id,
-            limit=limit,
-        )
-

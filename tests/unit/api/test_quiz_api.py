@@ -28,7 +28,7 @@ def memory_service():
     async def _setup():
         await service.initialize()
         async with get_db_connection(settings.test_database_url) as conn:
-            await conn.execute("TRUNCATE TABLE chat_messages, chat_sessions, student_activity_logs, quiz_records, students CASCADE;")
+            await conn.execute("TRUNCATE TABLE student_activity_logs, quiz_records, students CASCADE;")
 
     asyncio.run(_setup())
     return service
