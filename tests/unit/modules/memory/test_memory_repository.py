@@ -28,7 +28,6 @@ def repo():
 async def test_get_or_create_student(repo):
     """Kiểm tra tạo mới học sinh và lấy học sinh đã tồn tại."""
     await repo.initialize()
-    # Tạo mới
     student1 = await repo.get_or_create_student(
         student_id="student_01",
         name="Nguyen Van A",
@@ -39,7 +38,6 @@ async def test_get_or_create_student(repo):
     assert student1.name == "Nguyen Van A"
     assert student1.target_subjects == ["Toán", "Tin học"]
 
-    # Gọi lại với cùng ID -> Phải trả về học sinh cũ
     student2 = await repo.get_or_create_student(
         student_id="student_01",
         name="Ten Khac",
@@ -50,17 +48,21 @@ async def test_get_or_create_student(repo):
 
 @pytest.mark.asyncio
 async def test_quiz_record_and_statistics(repo):
-    """Kiểm tra lưu lịch sử Quiz và tính toán thống kê điểm số."""
+    """Kiểm tra lưu lịch sử Quiz và tính toán thống kê điểm số kèm telemetry."""
     await repo.initialize()
     await repo.get_or_create_student("student_01", "Nguyen Van A")
 
-    # Lưu 2 bài quiz
+    # Lưu 2 bài quiz kèm telemetry
     q1 = QuizRecord(
         student_id="student_01",
         topic="Python Cơ bản",
         score_percentage=80.0,
         total_questions=5,
         correct_count=4,
+        duration_ms=1200.0,
+        prompt_tokens=300,
+        completion_tokens=150,
+        total_tokens=450,
     )
     q2 = QuizRecord(
         student_id="student_01",
@@ -68,6 +70,10 @@ async def test_quiz_record_and_statistics(repo):
         score_percentage=100.0,
         total_questions=5,
         correct_count=5,
+        duration_ms=850.5,
+        prompt_tokens=250,
+        completion_tokens=100,
+        total_tokens=350,
     )
     id1 = await repo.save_quiz_record(q1)
     id2 = await repo.save_quiz_record(q2)
@@ -77,8 +83,11 @@ async def test_quiz_record_and_statistics(repo):
     # Lấy lịch sử
     history = await repo.get_quiz_history("student_01", limit=10)
     assert len(history) == 2
-    # Sắp xếp mới nhất trước
     assert history[0].topic == "Đại số tuyến tính"
+    assert history[0].duration_ms == 850.5
+    assert history[0].total_tokens == 350
+    assert history[1].duration_ms == 1200.0
+    assert history[1].total_tokens == 450
 
     # Thống kê
     stats = await repo.get_quiz_statistics("student_01")
@@ -105,7 +114,6 @@ async def test_get_or_create_student_with_extended_fields(repo):
     assert student.learning_style == "Thực hành & Trực quan"
     assert student.updated_at is not None
 
-    # Lấy lại kiểm tra tính bền vững
     retrieved = await repo.get_or_create_student(
         student_id="student_ext_01",
         name="Le Thi B",
@@ -130,6 +138,10 @@ async def test_quiz_record_ai_critique_persistence(repo):
         ai_praise="Nắm vững định lý ba đường vuông góc.",
         ai_critique="Cần cẩn thận khi tính khoảng cách giữa hai đường chéo nhau.",
         improvement_plan="Làm thêm 5 bài tập về khoảng cách trong tuần này.",
+        duration_ms=1550.0,
+        prompt_tokens=420,
+        completion_tokens=180,
+        total_tokens=600,
     )
     quiz_id = await repo.save_quiz_record(record)
     assert quiz_id > 0
@@ -140,6 +152,8 @@ async def test_quiz_record_ai_critique_persistence(repo):
     assert saved.ai_praise == "Nắm vững định lý ba đường vuông góc."
     assert saved.ai_critique == "Cần cẩn thận khi tính khoảng cách giữa hai đường chéo nhau."
     assert saved.improvement_plan == "Làm thêm 5 bài tập về khoảng cách trong tuần này."
+    assert saved.duration_ms == 1550.0
+    assert saved.total_tokens == 600
 
 
 @pytest.mark.asyncio
@@ -148,7 +162,6 @@ async def test_student_activity_logging(repo):
     await repo.initialize()
     await repo.get_or_create_student("student_act_01", "Hoang Van D")
 
-    # Ghi log làm quiz
     log1 = await repo.log_student_activity(
         student_id="student_act_01",
         action_type="quiz_completed",
@@ -157,7 +170,6 @@ async def test_student_activity_logging(repo):
     assert log1.id is not None
     assert log1.action_type == "quiz_completed"
 
-    # Lấy danh sách logs
     logs = await repo.get_student_activity_logs("student_act_01", limit=10)
     assert len(logs) == 1
     assert logs[0].action_type == "quiz_completed"
@@ -194,6 +206,10 @@ async def test_get_quiz_record_by_id_drilldown(repo):
         ai_praise="Xuất sắc phần lịch sử cận đại",
         ai_critique="Sai sót câu hỏi mốc thời gian 1945",
         improvement_plan="Đọc lại SGK trang 120",
+        duration_ms=920.0,
+        prompt_tokens=210,
+        completion_tokens=90,
+        total_tokens=300,
     )
     qid = await repo.save_quiz_record(q)
     fetched = await repo.get_quiz_record_by_id(qid)
@@ -202,9 +218,8 @@ async def test_get_quiz_record_by_id_drilldown(repo):
     assert fetched.id == qid
     assert fetched.topic == "Lịch sử"
     assert fetched.score_percentage == 90.0
-    assert fetched.ai_praise == "Xuất sắc phần lịch sử cận đại"
-    assert fetched.ai_critique == "Sai sót câu hỏi mốc thời gian 1945"
-    assert fetched.improvement_plan == "Đọc lại SGK trang 120"
+    assert fetched.duration_ms == 920.0
+    assert fetched.total_tokens == 300
 
 
 @pytest.mark.asyncio
@@ -223,15 +238,12 @@ async def test_get_quiz_record_by_id_with_student_id_isolation(repo):
     )
     quiz_id = await repo.save_quiz_record(record)
 
-    # Đúng chủ sở hữu -> xem được
     owner_view = await repo.get_quiz_record_by_id(quiz_id=quiz_id, student_id="student_owner")
     assert owner_view is not None
     assert owner_view.id == quiz_id
 
-    # Khác chủ sở hữu -> không xem được (None)
     other_view = await repo.get_quiz_record_by_id(quiz_id=quiz_id, student_id="student_other")
     assert other_view is None
 
-    # Không truyền student_id -> xem được bình thường
     admin_view = await repo.get_quiz_record_by_id(quiz_id=quiz_id)
     assert admin_view is not None

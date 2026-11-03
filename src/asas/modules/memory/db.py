@@ -11,6 +11,7 @@ from asas.core.config import get_settings
 POSTGRES_SCHEMA_SQL = """
 CREATE TABLE IF NOT EXISTS students (
     student_id VARCHAR(64) PRIMARY KEY,
+    device_id VARCHAR(64),
     name VARCHAR(255) NOT NULL,
     grade_level VARCHAR(50),
     school VARCHAR(255),
@@ -20,6 +21,10 @@ CREATE TABLE IF NOT EXISTS students (
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
+
+-- Migration an toàn cho database đã có sẵn bảng students
+ALTER TABLE students ADD COLUMN IF NOT EXISTS device_id VARCHAR(64);
+CREATE INDEX IF NOT EXISTS idx_students_device_id ON students(device_id);
 
 CREATE TABLE IF NOT EXISTS quiz_records (
     id SERIAL PRIMARY KEY,
@@ -31,8 +36,41 @@ CREATE TABLE IF NOT EXISTS quiz_records (
     ai_praise TEXT,
     ai_critique TEXT,
     improvement_plan TEXT,
+    duration_ms DOUBLE PRECISION NOT NULL DEFAULT 0.0,
+    prompt_tokens INT NOT NULL DEFAULT 0,
+    completion_tokens INT NOT NULL DEFAULT 0,
+    total_tokens INT NOT NULL DEFAULT 0,
     completed_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
+
+-- Migration an toàn cho database đã có sẵn bảng quiz_records
+ALTER TABLE quiz_records ADD COLUMN IF NOT EXISTS duration_ms DOUBLE PRECISION NOT NULL DEFAULT 0.0;
+ALTER TABLE quiz_records ADD COLUMN IF NOT EXISTS prompt_tokens INT NOT NULL DEFAULT 0;
+ALTER TABLE quiz_records ADD COLUMN IF NOT EXISTS completion_tokens INT NOT NULL DEFAULT 0;
+ALTER TABLE quiz_records ADD COLUMN IF NOT EXISTS total_tokens INT NOT NULL DEFAULT 0;
+
+CREATE TABLE IF NOT EXISTS questions (
+    id SERIAL PRIMARY KEY,
+    topic VARCHAR(255) NOT NULL,
+    difficulty VARCHAR(50) NOT NULL,
+    question TEXT NOT NULL,
+    options JSONB NOT NULL,
+    correct_answer_id VARCHAR(10) NOT NULL,
+    explanation TEXT NOT NULL,
+    times_used INT NOT NULL DEFAULT 0,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_questions_topic_diff ON questions(topic, difficulty);
+
+CREATE TABLE IF NOT EXISTS student_answered_questions (
+    student_id VARCHAR(64) NOT NULL REFERENCES students(student_id) ON DELETE CASCADE,
+    question_id INT NOT NULL REFERENCES questions(id) ON DELETE CASCADE,
+    answered_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    PRIMARY KEY (student_id, question_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_student_answered_questions_student ON student_answered_questions(student_id);
 
 CREATE TABLE IF NOT EXISTS student_activity_logs (
     id VARCHAR(64) PRIMARY KEY,

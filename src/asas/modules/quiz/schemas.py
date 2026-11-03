@@ -18,13 +18,18 @@ class QuestionType(str, Enum):
 
 
 class QuizOption(BaseModel):
-    """Lựa chọn đáp án cho câu hỏi trắc nghiệm."""
+    """Lựa chọn đáp án cho câu hỏi trắc nghiệm kèm ngộ nhận sư phạm."""
     id: str = Field(..., description="Mã định danh lựa chọn (ví dụ: 'A', 'B', 'C', 'D')")
     text: str = Field(..., description="Nội dung đáp án")
+    misconception: Optional[str] = Field(
+        None,
+        description="Lỗ hổng kiến thức hoặc ngộ nhận lý thuyết nếu học sinh chọn đáp án sai này",
+    )
 
 
 class QuizQuestion(BaseModel):
     """Một câu hỏi trắc nghiệm hoàn chỉnh kèm lời giải thích."""
+    id: Optional[int] = Field(None, description="Mã ID trong kho CSDL nếu có")
     question: str = Field(..., description="Nội dung câu hỏi")
     question_type: QuestionType = Field(default=QuestionType.MULTIPLE_CHOICE)
     options: List[QuizOption] = Field(default_factory=list, description="Danh sách lựa chọn (nếu có)")
@@ -50,6 +55,8 @@ class QuizGenerationRequest(BaseModel):
     num_questions: int = Field(default=5, ge=1, le=20, description="Số lượng câu hỏi cần tạo (1-20)")
     difficulty: DifficultyLevel = Field(default=DifficultyLevel.MEDIUM)
     language: str = Field(default="vi", description="Ngôn ngữ tạo câu hỏi (vi, en, ...)")
+    force_new: bool = Field(default=False, description="Bắt buộc gọi AI sinh câu mới thay vì lấy từ kho")
+    student_id: Optional[str] = Field(None, description="Mã định danh học sinh để tránh lặp câu hỏi đã làm")
 
 
 class Quiz(BaseModel):
@@ -57,6 +64,7 @@ class Quiz(BaseModel):
     title: str = Field(..., description="Tiêu đề của bài kiểm tra")
     topic: str = Field(..., description="Chủ đề")
     questions: List[QuizQuestion] = Field(..., min_length=1, description="Danh sách các câu hỏi")
+    source: str = Field(default="ai_generated", description="Nguồn gốc câu hỏi: 'bank', 'ai_generated', hoặc 'hybrid'")
 
 
 class QuizGradeResult(BaseModel):
@@ -65,4 +73,4 @@ class QuizGradeResult(BaseModel):
     correct_count: int = Field(..., description="Số lượng câu trả lời đúng")
     score_percentage: float = Field(..., description="Tỷ lệ điểm phần trăm (0.0 - 100.0)")
     details: List[Dict[str, Any]] = Field(default_factory=list, description="Chi tiết đánh giá từng câu hỏi")
-
+    misconceptions: List[str] = Field(default_factory=list, description="Danh sách các ngộ nhận phát hiện được từ các câu sai")

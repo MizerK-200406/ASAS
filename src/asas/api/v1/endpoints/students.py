@@ -16,6 +16,7 @@ router = APIRouter(prefix="/students", tags=["Students"])
 class StudentCreateOrUpdateRequest(BaseModel):
     student_id: str = Field(..., min_length=2, max_length=50, description="Mã định danh hoặc Username")
     name: str = Field(..., min_length=1, max_length=100, description="Họ và tên học sinh")
+    device_id: Optional[str] = Field(None, max_length=64, description="Mã định danh thiết bị/máy tính tạo tài khoản")
     grade_level: Optional[str] = Field(None, max_length=50, description="Khối lớp (VD: Lớp 12)")
     school: Optional[str] = Field(None, max_length=100, description="Trường học")
     target_subjects: List[str] = Field(default_factory=list, description="Danh sách môn học mục tiêu")
@@ -32,10 +33,11 @@ class StudentSummaryResponse(BaseModel):
 
 @router.get("", response_model=List[StudentProfile])
 async def list_students(
+    device_id: Optional[str] = Query(None, description="Lọc danh sách học sinh theo mã thiết bị (device isolation)"),
     memory_service: MemoryService = Depends(get_memory_service),
 ) -> List[StudentProfile]:
-    """Lấy danh sách tất cả học sinh đã lưu trong cơ sở dữ liệu."""
-    return await memory_service.get_all_students()
+    """Lấy danh sách tất cả học sinh đã lưu trong cơ sở dữ liệu (hỗ trợ lọc theo thiết bị)."""
+    return await memory_service.get_all_students(device_id=device_id)
 
 
 @router.post("", response_model=StudentProfile)
@@ -47,6 +49,7 @@ async def create_or_update_student(
     return await memory_service.get_or_create_student(
         student_id=payload.student_id,
         name=payload.name,
+        device_id=payload.device_id,
         grade_level=payload.grade_level,
         school=payload.school,
         target_subjects=payload.target_subjects,

@@ -1,4 +1,3 @@
-import os
 import pytest
 from pydantic import ValidationError
 
@@ -15,7 +14,7 @@ def test_settings_default_values(monkeypatch):
     settings = Settings()
     assert settings.nvidia_api_key == "nvapi-test-key-12345"
     assert settings.nvidia_base_url == "https://integrate.api.nvidia.com/v1"
-    assert settings.default_model == "deepseek-ai/deepseek-v4.1-flash"
+    assert settings.default_model == "poolside/laguna-xs-2.1"
     assert settings.app_env == "development"
     assert settings.log_level == "INFO"
 

@@ -44,9 +44,11 @@ class EvaluatorAgent:
             {"role": "system", "content": self.system_prompt},
             {"role": "user", "content": prompt},
         ]
+        model = getattr(getattr(self.llm_client, "settings", None), "evaluator_model", None)
         return await self.llm_client.structured_output(
             messages=messages,
             response_model=EvaluationResult,
+            model=model,
             temperature=0.2,
         )
 
@@ -127,9 +129,11 @@ class EvaluatorAgent:
         ]
 
         logger.info(f"[EvaluatorAgent] Bắt đầu đánh giá lỗ hổng kiến thức Quiz cho {name}...")
+        model = getattr(getattr(self.llm_client, "settings", None), "evaluator_model", None)
         evaluation = await self.llm_client.structured_output(
             messages=messages,
             response_model=EvaluationResult,
+            model=model,
             temperature=0.2,
         )
         return evaluation

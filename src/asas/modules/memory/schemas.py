@@ -33,6 +33,7 @@ class StudentProfile(BaseModel):
 
     student_id: str
     name: str
+    device_id: Optional[str] = None
     grade_level: Optional[str] = None
     school: Optional[str] = None
     target_subjects: List[str] = Field(default_factory=list)
@@ -43,7 +44,7 @@ class StudentProfile(BaseModel):
 
 
 class QuizRecord(BaseModel):
-    """Bản ghi kết quả bài trắc nghiệm của học sinh kèm nhận xét của AI."""
+    """Bản ghi kết quả bài trắc nghiệm của học sinh kèm nhận xét của AI và telemetry."""
 
     id: Optional[int] = None
     student_id: str
@@ -54,6 +55,10 @@ class QuizRecord(BaseModel):
     ai_praise: Optional[str] = None
     ai_critique: Optional[str] = None
     improvement_plan: Optional[str] = None
+    duration_ms: float = Field(default=0.0, description="Thời gian thực thi (ms)")
+    prompt_tokens: int = Field(default=0, description="Số prompt token tiêu thụ")
+    completion_tokens: int = Field(default=0, description="Số completion token tiêu thụ")
+    total_tokens: int = Field(default=0, description="Tổng số token tiêu thụ")
     completed_at: datetime = Field(default_factory=utc_now)
 
 

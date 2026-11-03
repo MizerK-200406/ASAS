@@ -13,6 +13,7 @@ from asas.modules.memory.schemas import (
     utc_now,
 )
 from asas.modules.memory.session import SessionMemory
+from asas.modules.quiz.schemas import QuizQuestion
 
 
 class MemoryService:
@@ -69,6 +70,7 @@ class MemoryService:
         self,
         student_id: str,
         name: str,
+        device_id: Optional[str] = None,
         grade_level: Optional[str] = None,
         school: Optional[str] = None,
         target_subjects: Optional[List[str]] = None,
@@ -79,6 +81,7 @@ class MemoryService:
         return await self.repository.get_or_create_student(
             student_id=student_id,
             name=name,
+            device_id=device_id,
             grade_level=grade_level,
             school=school,
             target_subjects=target_subjects,
@@ -94,9 +97,9 @@ class MemoryService:
         """Cập nhật thông tin chi tiết hồ sơ học sinh."""
         return await self.repository.update_student_profile(profile)
 
-    async def get_all_students(self) -> List[StudentProfile]:
-        """Lấy danh sách tất cả học sinh đã đăng ký trong hệ thống."""
-        return await self.repository.get_all_students()
+    async def get_all_students(self, device_id: Optional[str] = None) -> List[StudentProfile]:
+        """Lấy danh sách tất cả học sinh đã đăng ký trong hệ thống (có thể lọc theo device_id)."""
+        return await self.repository.get_all_students(device_id=device_id)
 
     async def get_quiz_record_by_id(
         self,
@@ -112,14 +115,7 @@ class MemoryService:
         identifier: str,
         limit: int = 50,
     ) -> Optional[QuizRecord]:
-        """
-        Tra cứu bài thi thông minh cho học sinh:
-        - Nếu có tiền tố '#' (VD: #1), tra cứu theo ID toàn cục của bài thi.
-        - Nếu là số nguyên thông thường (VD: 1, 2):
-          + Ưu tiên đối chiếu với Số Thứ Tự (STT 1-based) trong lịch sử bài thi của học sinh.
-          + Nếu vượt quá STT, tiếp tục đối chiếu theo ID toàn cục của học sinh đó.
-        Đảm bảo không bao giờ truy cập chéo bài thi của học sinh khác.
-        """
+        """Tra cứu bài thi thông minh cho học sinh theo số thứ tự hoặc ID."""
         raw = identifier.strip()
         is_hash = raw.startswith("#")
         clean_str = raw.lstrip("#")
@@ -131,18 +127,15 @@ class MemoryService:
         if not quizzes:
             return None
 
-        # 1. Nếu có dấu #, tìm theo ID bài thi
         if is_hash:
             for q in quizzes:
                 if q.id == val:
                     return q
             return await self.get_quiz_record_by_id(quiz_id=val, student_id=student_id)
 
-        # 2. Nếu là số thường: ưu tiên STT trong danh sách của học sinh
         if 1 <= val <= len(quizzes):
             return quizzes[val - 1]
 
-        # 3. Dự phòng tìm theo ID nếu số nhập vượt quá phạm vi STT
         for q in quizzes:
             if q.id == val:
                 return q
@@ -160,7 +153,6 @@ class MemoryService:
             limit=limit,
         )
 
-
     async def record_quiz_result(
         self,
         student_id: str,
@@ -171,8 +163,12 @@ class MemoryService:
         ai_praise: Optional[str] = None,
         ai_critique: Optional[str] = None,
         improvement_plan: Optional[str] = None,
+        duration_ms: float = 0.0,
+        prompt_tokens: int = 0,
+        completion_tokens: int = 0,
+        total_tokens: int = 0,
     ) -> int:
-        """Ghi nhận kết quả làm bài trắc nghiệm của học sinh kèm nhận xét của AI vào CSDL."""
+        """Ghi nhận kết quả làm bài trắc nghiệm của học sinh kèm nhận xét của AI và telemetry vào CSDL."""
         record = QuizRecord(
             student_id=student_id,
             topic=topic,
@@ -182,10 +178,13 @@ class MemoryService:
             ai_praise=ai_praise,
             ai_critique=ai_critique,
             improvement_plan=improvement_plan,
+            duration_ms=duration_ms,
+            prompt_tokens=prompt_tokens,
+            completion_tokens=completion_tokens,
+            total_tokens=total_tokens,
         )
         row_id = await self.repository.save_quiz_record(record)
 
-        # Tự động ghi nhật ký hoạt động
         desc = f"Làm bài kiểm tra '{topic}': {score_percentage}% ({correct_count}/{total_questions})"
         await self.repository.log_student_activity(
             student_id=student_id,
@@ -204,20 +203,34 @@ class MemoryService:
             student_id=student_id,
             name="Học sinh",
         )
-        quiz_stats = await self.repository.get_quiz_statistics(student_id)
-        recent_quizzes = await self.repository.get_quiz_history(student_id, limit=5)
-        recent_activities = await self.repository.get_student_activity_logs(student_id, limit=activity_limit)
+        stats = await self.repository.get_quiz_statistics(student_id)
+        recent_activities = await self.repository.get_student_activity_logs(
+            student_id=student_id,
+            limit=activity_limit,
+        )
         return {
             "profile": profile,
-            "quiz_stats": quiz_stats,
-            "recent_quizzes": recent_quizzes,
+            "quiz_stats": {
+                "total_quizzes": stats["total_quizzes"],
+                "average_score": stats["average_score"],
+                "highest_score": stats["highest_score"],
+                "total_correct": stats["total_correct"],
+                "total_questions": stats["total_questions"],
+            },
+            "recent_quizzes": stats.get("recent_quizzes", []),
             "recent_activities": recent_activities,
         }
 
-
-    # -------------------------------------------------------------
-    # 4. Quản lý Nhật ký hoạt động (Activity Logs)
-    # -------------------------------------------------------------
+    async def get_student_activity_logs(
+        self,
+        student_id: str,
+        limit: int = 20,
+    ) -> List[StudentActivityLog]:
+        """Lấy nhật ký hoạt động gần đây của học sinh."""
+        return await self.repository.get_student_activity_logs(
+            student_id=student_id,
+            limit=limit,
+        )
 
     async def log_activity(
         self,
@@ -225,20 +238,41 @@ class MemoryService:
         action_type: str,
         description: str,
     ) -> StudentActivityLog:
-        """Ghi lại vết hoạt động của học sinh."""
+        """Ghi nhận một hoạt động học tập của học sinh."""
         return await self.repository.log_student_activity(
             student_id=student_id,
             action_type=action_type,
             description=description,
         )
 
-    async def get_student_activity_logs(
+    # -------------------------------------------------------------
+    # 3. Ngân hàng câu hỏi (Question Bank)
+    # -------------------------------------------------------------
+
+    async def save_questions_to_bank(
         self,
-        student_id: str,
-        limit: int = 10,
-    ) -> List[StudentActivityLog]:
-        """Lấy danh sách nhật ký hoạt động gần nhất của học sinh."""
-        return await self.repository.get_student_activity_logs(
-            student_id=student_id,
+        questions: List[QuizQuestion],
+        topic: str,
+        difficulty: str,
+    ) -> List[int]:
+        """Lưu danh sách câu hỏi vào ngân hàng câu hỏi trong CSDL."""
+        return await self.repository.save_questions(questions=questions, topic=topic, difficulty=difficulty)
+
+    async def get_available_questions_from_bank(
+        self,
+        topic: str,
+        difficulty: str,
+        limit: int,
+        student_id: Optional[str] = None,
+    ) -> List[QuizQuestion]:
+        """Lấy danh sách câu hỏi khả dụng từ ngân hàng câu hỏi."""
+        return await self.repository.get_available_questions(
+            topic=topic,
+            difficulty=difficulty,
             limit=limit,
+            student_id=student_id,
         )
+
+    async def mark_questions_answered(self, student_id: str, question_ids: List[int]) -> None:
+        """Đánh dấu học sinh đã trả lời câu hỏi để tránh lặp lại."""
+        await self.repository.mark_questions_answered(student_id=student_id, question_ids=question_ids)

@@ -1,4 +1,4 @@
-"""Long-term Memory Repository providing async PostgreSQL CRUD for student profile, quiz history, and activity logs."""
+"""Long-term Memory Repository providing async PostgreSQL CRUD for student profile, quiz history, activity logs, and question bank."""
 
 from datetime import datetime
 import json
@@ -13,6 +13,7 @@ from asas.modules.memory.schemas import (
     StudentProfile,
     utc_now,
 )
+from asas.modules.quiz.schemas import DifficultyLevel, QuizOption, QuizQuestion
 
 
 def _to_datetime(val: Any) -> datetime:
@@ -23,7 +24,7 @@ def _to_datetime(val: Any) -> datetime:
 
 
 class MemoryRepository:
-    """Repository quản lý truy xuất và lưu trữ dữ liệu học sinh trong PostgreSQL async."""
+    """Repository quản lý truy xuất và lưu trữ dữ liệu học sinh và ngân hàng câu hỏi trong PostgreSQL async."""
 
     def __init__(
         self,
@@ -53,6 +54,7 @@ class MemoryRepository:
         self,
         student_id: str,
         name: str,
+        device_id: Optional[str] = None,
         grade_level: Optional[str] = None,
         school: Optional[str] = None,
         target_subjects: Optional[List[str]] = None,
@@ -70,6 +72,7 @@ class MemoryRepository:
                 return StudentProfile(
                     student_id=row["student_id"],
                     name=row["name"],
+                    device_id=row.get("device_id"),
                     grade_level=row["grade_level"],
                     school=row["school"],
                     target_subjects=parsed_subjects,
@@ -84,12 +87,13 @@ class MemoryRepository:
             await conn.execute(
                 """
                 INSERT INTO students (
-                    student_id, name, grade_level, school,
+                    student_id, device_id, name, grade_level, school,
                     target_subjects, target_goal, learning_style,
                     created_at, updated_at
-                ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+                ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
                 """,
                 student_id,
+                device_id,
                 name,
                 grade_level,
                 school,
@@ -102,6 +106,7 @@ class MemoryRepository:
             return StudentProfile(
                 student_id=student_id,
                 name=name,
+                device_id=device_id,
                 grade_level=grade_level,
                 school=school,
                 target_subjects=subjects,
@@ -124,6 +129,7 @@ class MemoryRepository:
             return StudentProfile(
                 student_id=row["student_id"],
                 name=row["name"],
+                device_id=row.get("device_id"),
                 grade_level=row["grade_level"],
                 school=row["school"],
                 target_subjects=parsed_subjects,
@@ -157,10 +163,16 @@ class MemoryRepository:
         profile.updated_at = now
         return profile
 
-    async def get_all_students(self) -> List[StudentProfile]:
-        """Lấy danh sách tất cả học sinh."""
+    async def get_all_students(self, device_id: Optional[str] = None) -> List[StudentProfile]:
+        """Lấy danh sách học sinh (có thể lọc theo device_id để cách ly thiết bị)."""
         async with get_db_connection(self.db_url) as conn:
-            rows = await conn.fetch("SELECT * FROM students ORDER BY created_at DESC")
+            if device_id:
+                rows = await conn.fetch(
+                    "SELECT * FROM students WHERE device_id = $1 ORDER BY created_at DESC",
+                    device_id,
+                )
+            else:
+                rows = await conn.fetch("SELECT * FROM students ORDER BY created_at DESC")
             students = []
             for r in rows:
                 raw_sub = r["target_subjects"]
@@ -169,6 +181,7 @@ class MemoryRepository:
                     StudentProfile(
                         student_id=r["student_id"],
                         name=r["name"],
+                        device_id=r.get("device_id"),
                         grade_level=r["grade_level"],
                         school=r["school"],
                         target_subjects=parsed_sub,
@@ -185,7 +198,7 @@ class MemoryRepository:
     # -------------------------------------------------------------
 
     async def save_quiz_record(self, record: QuizRecord) -> int:
-        """Lưu lịch sử kết quả làm bài trắc nghiệm."""
+        """Lưu lịch sử kết quả làm bài trắc nghiệm kèm telemetry."""
         async with get_db_connection(self.db_url) as conn:
             quiz_id = await conn.fetchval(
                 """
@@ -193,8 +206,9 @@ class MemoryRepository:
                     student_id, topic, score_percentage,
                     total_questions, correct_count,
                     ai_praise, ai_critique, improvement_plan,
+                    duration_ms, prompt_tokens, completion_tokens, total_tokens,
                     completed_at
-                ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+                ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
                 RETURNING id
                 """,
                 record.student_id,
@@ -205,6 +219,10 @@ class MemoryRepository:
                 record.ai_praise,
                 record.ai_critique,
                 record.improvement_plan,
+                float(record.duration_ms),
+                int(record.prompt_tokens),
+                int(record.completion_tokens),
+                int(record.total_tokens),
                 record.completed_at,
             )
             return int(quiz_id)
@@ -233,6 +251,10 @@ class MemoryRepository:
                     ai_praise=r["ai_praise"],
                     ai_critique=r["ai_critique"],
                     improvement_plan=r["improvement_plan"],
+                    duration_ms=float(r["duration_ms"]) if "duration_ms" in r and r["duration_ms"] is not None else 0.0,
+                    prompt_tokens=int(r["prompt_tokens"]) if "prompt_tokens" in r and r["prompt_tokens"] is not None else 0,
+                    completion_tokens=int(r["completion_tokens"]) if "completion_tokens" in r and r["completion_tokens"] is not None else 0,
+                    total_tokens=int(r["total_tokens"]) if "total_tokens" in r and r["total_tokens"] is not None else 0,
                     completed_at=_to_datetime(r["completed_at"]),
                 )
                 for r in rows
@@ -267,6 +289,10 @@ class MemoryRepository:
                 ai_praise=r["ai_praise"],
                 ai_critique=r["ai_critique"],
                 improvement_plan=r["improvement_plan"],
+                duration_ms=float(r["duration_ms"]) if "duration_ms" in r and r["duration_ms"] is not None else 0.0,
+                prompt_tokens=int(r["prompt_tokens"]) if "prompt_tokens" in r and r["prompt_tokens"] is not None else 0,
+                completion_tokens=int(r["completion_tokens"]) if "completion_tokens" in r and r["completion_tokens"] is not None else 0,
+                total_tokens=int(r["total_tokens"]) if "total_tokens" in r and r["total_tokens"] is not None else 0,
                 completed_at=_to_datetime(r["completed_at"]),
             )
 
@@ -366,3 +392,124 @@ class MemoryRepository:
                 )
                 for r in rows
             ]
+
+    # -------------------------------------------------------------
+    # 4. Question Bank (Kho lưu trữ câu hỏi & Ngộ nhận)
+    # -------------------------------------------------------------
+
+    async def save_questions(
+        self,
+        questions: List[QuizQuestion],
+        topic: str,
+        difficulty: str,
+    ) -> List[int]:
+        """Lưu danh sách câu hỏi trắc nghiệm vào kho câu hỏi trong CSDL."""
+        saved_ids: List[int] = []
+        cleaned_topic = topic.strip().lower()
+        cleaned_diff = difficulty.strip().lower()
+
+        async with get_db_connection(self.db_url) as conn:
+            for q in questions:
+                options_data = [opt.model_dump() for opt in q.options]
+                qid = await conn.fetchval(
+                    """
+                    INSERT INTO questions (
+                        topic, difficulty, question, options,
+                        correct_answer_id, explanation, times_used, created_at
+                    ) VALUES ($1, $2, $3, $4, $5, $6, $7, NOW())
+                    RETURNING id
+                    """,
+                    cleaned_topic,
+                    cleaned_diff,
+                    q.question.strip(),
+                    json.dumps(options_data, ensure_ascii=False),
+                    q.correct_answer_id,
+                    q.explanation,
+                    1,
+                )
+                q.id = int(qid)
+                saved_ids.append(int(qid))
+        return saved_ids
+
+    async def get_available_questions(
+        self,
+        topic: str,
+        difficulty: str,
+        limit: int,
+        student_id: Optional[str] = None,
+    ) -> List[QuizQuestion]:
+        """
+        Lấy danh sách câu hỏi từ kho:
+        - Khớp topic và độ khó.
+        - Trừ đi các câu hỏi mà student_id này đã từng làm.
+        - Ưu tiên câu hỏi ít dùng và xáo trộn ngẫu nhiên.
+        """
+        cleaned_topic = topic.strip().lower()
+        cleaned_diff = difficulty.strip().lower()
+
+        async with get_db_connection(self.db_url) as conn:
+            if student_id:
+                query = """
+                SELECT * FROM questions
+                WHERE LOWER(topic) = $1 AND LOWER(difficulty) = $2
+                  AND id NOT IN (
+                      SELECT question_id FROM student_answered_questions
+                      WHERE student_id = $3
+                  )
+                ORDER BY times_used ASC, RANDOM()
+                LIMIT $4
+                """
+                rows = await conn.fetch(query, cleaned_topic, cleaned_diff, student_id, limit)
+            else:
+                query = """
+                SELECT * FROM questions
+                WHERE LOWER(topic) = $1 AND LOWER(difficulty) = $2
+                ORDER BY times_used ASC, RANDOM()
+                LIMIT $3
+                """
+                rows = await conn.fetch(query, cleaned_topic, cleaned_diff, limit)
+
+            result: List[QuizQuestion] = []
+            for r in rows:
+                opts_raw = r["options"]
+                opts_list = json.loads(opts_raw) if isinstance(opts_raw, str) else list(opts_raw)
+                options = [QuizOption(**opt) for opt in opts_list]
+                diff_enum = DifficultyLevel(r["difficulty"]) if r["difficulty"] in [d.value for d in DifficultyLevel] else DifficultyLevel.MEDIUM
+                result.append(
+                    QuizQuestion(
+                        id=r["id"],
+                        question=r["question"],
+                        options=options,
+                        correct_answer_id=r["correct_answer_id"],
+                        explanation=r["explanation"],
+                        difficulty=diff_enum,
+                    )
+                )
+
+            # Cập nhật times_used
+            if result:
+                q_ids = [q.id for q in result if q.id is not None]
+                if q_ids:
+                    await conn.execute(
+                        "UPDATE questions SET times_used = times_used + 1 WHERE id = ANY($1::int[])",
+                        q_ids,
+                    )
+
+            return result
+
+    async def mark_questions_answered(self, student_id: str, question_ids: List[int]) -> None:
+        """Đánh dấu học sinh đã hoàn thành các câu hỏi để tránh lặp lại."""
+        if not student_id or not question_ids:
+            return
+
+        async with get_db_connection(self.db_url) as conn:
+            for qid in question_ids:
+                await conn.execute(
+                    """
+                    INSERT INTO student_answered_questions (student_id, question_id, answered_at)
+                    VALUES ($1, $2, NOW())
+                    ON CONFLICT (student_id, question_id) DO NOTHING
+                    """,
+                    student_id,
+                    qid,
+                )

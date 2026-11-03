@@ -1,0 +1,341 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ASAS - AI Assessment System</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+
+  <!-- Top Navigation Bar -->
+  <header class="navbar">
+    <div class="nav-container">
+      <div class="brand">
+        <div class="logo-icon">🎓</div>
+        <div class="brand-text">
+          <h1>ASAS</h1>
+          <span class="badge-sub">AI Assessment & Question Bank</span>
+        </div>
+      </div>
+
+      <div class="nav-actions">
+        <!-- Khi đã đăng nhập hồ sơ -->
+        <div id="userNavActions" class="user-nav-box hidden">
+          <div class="user-profile-badge">
+            <span class="user-avatar-circle">👤</span>
+            <div class="user-info-text">
+              <span id="navStudentName" class="user-name">Đang tải...</span>
+              <span id="navStudentId" class="user-id">#id</span>
+            </div>
+          </div>
+          <button id="btnOpenHistory" class="btn-outline btn-sm">
+            📊 Lịch sử bài thi
+          </button>
+          <button id="btnSwitchAccount" class="btn-secondary btn-sm" title="Đổi sang tài khoản khác trên máy này">
+            🔄 Đổi tài khoản
+          </button>
+        </div>
+
+        <!-- Khi chưa đăng nhập -->
+        <div id="guestNavNotice" class="guest-nav-box">
+          <span class="guest-badge">🔒 Chưa đăng nhập</span>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <!-- Main Content Container -->
+  <main class="main-container">
+
+    <!-- View 0: Authentication / Profile Gate (Bắt buộc chọn/tạo tài khoản) -->
+    <section id="authSection" class="card fade-in">
+      <!-- Trường hợp 1: Trên thiết bị ĐÃ CÓ 1 hoặc nhiều tài khoản -->
+      <div id="accountSelectBox" class="auth-box">
+        <div class="auth-header">
+          <div class="auth-icon">👋</div>
+          <h2>Chào mừng bạn trở lại!</h2>
+          <p class="subtitle">Vui lòng chọn tài khoản học sinh của bạn trên thiết bị này để tiếp tục:</p>
+        </div>
+
+        <div id="studentAccountsList" class="student-cards-grid">
+          <!-- Dynamically populated student cards -->
+        </div>
+
+        <div class="auth-divider">
+          <span>hoặc</span>
+        </div>
+
+        <div class="auth-footer-actions">
+          <button id="btnShowCreateAccount" class="btn-outline btn-lg full-width">
+            ➕ Tạo tài khoản học sinh mới trên thiết bị này
+          </button>
+        </div>
+      </div>
+
+      <!-- Trường hợp 2: Tạo tài khoản mới trên thiết bị này -->
+      <div id="accountCreateBox" class="auth-box hidden">
+        <div class="auth-header">
+          <div class="auth-icon">📝</div>
+          <h2 id="createAccountTitle">Đăng ký hồ sơ học sinh</h2>
+          <p class="subtitle">Hồ sơ sẽ được lưu an toàn trên máy tính này để ghi nhận lịch sử bài làm và phân tích sư phạm.</p>
+        </div>
+
+        <form id="authCreateForm" class="auth-form">
+          <div class="form-group">
+            <label class="form-label">Họ và tên học sinh <span class="required">*</span></label>
+            <input type="text" id="authStudentName" class="form-control" placeholder="Ví dụ: Nguyễn Văn A" required>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Mã ID / Username <span class="required">*</span></label>
+            <input type="text" id="authStudentId" class="form-control" placeholder="Ví dụ: student_nguyenvana" required>
+            <small class="form-hint">Mã định danh duy nhất (chữ cái, số, gạch dưới).</small>
+          </div>
+          <div class="form-row">
+            <div class="form-group">
+              <label class="form-label">Khối / Lớp</label>
+              <input type="text" id="authStudentGrade" class="form-control" placeholder="Ví dụ: Lớp 12A1">
+            </div>
+            <div class="form-group">
+              <label class="form-label">Trường học</label>
+              <input type="text" id="authStudentSchool" class="form-control" placeholder="Ví dụ: THPT Chuyên">
+            </div>
+          </div>
+          <div class="form-actions auth-actions">
+            <button type="button" id="btnCancelCreateAccount" class="btn-outline hidden">Quay lại chọn tài khoản</button>
+            <button type="submit" class="btn-primary btn-lg">🚀 Xác nhận & Vào làm bài</button>
+          </div>
+        </form>
+      </div>
+    </section>
+
+    <!-- View 1: Quiz Configuration Form -->
+    <section id="configSection" class="card hidden fade-in">
+      <div class="card-header">
+        <h2>Thiết kế Đề thi Trắc nghiệm</h2>
+        <p class="subtitle">Hệ thống AI tự động thiết kế câu hỏi trắc nghiệm đạt chuẩn sư phạm và phân tích ngộ nhận lý thuyết.</p>
+      </div>
+
+      <form id="quizForm" class="form-grid">
+        <!-- Topic Input -->
+        <div class="form-group full-width">
+          <label for="topicInput" class="form-label">Chủ đề bài thi <span class="required">*</span></label>
+          <div class="input-with-icon">
+            <span class="icon">🔍</span>
+            <input type="text" id="topicInput" class="form-control" placeholder="Ví dụ: Python cơ bản, Cấu trúc dữ liệu, Toán rời rạc..." required>
+          </div>
+
+          <!-- Quick Topic Suggestions Chips -->
+          <div class="topic-chips">
+            <span class="chip-label">Gợi ý nhanh:</span>
+            <button type="button" class="chip" data-topic="Python Basics">🐍 Python Basics</button>
+            <button type="button" class="chip" data-topic="Cấu trúc dữ liệu">🌲 Cấu trúc dữ liệu</button>
+            <button type="button" class="chip" data-topic="Toán rời rạc">📐 Toán rời rạc</button>
+            <button type="button" class="chip" data-topic="Machine Learning">🤖 Machine Learning</button>
+            <button type="button" class="chip" data-topic="SQL & Database">💾 SQL & Database</button>
+          </div>
+        </div>
+
+        <!-- Number of Questions -->
+        <div class="form-group">
+          <label for="numQuestions" class="form-label">Số lượng câu hỏi</label>
+          <select id="numQuestions" class="form-control">
+            <option value="3" selected>3 câu (Khởi động nhanh)</option>
+            <option value="5">5 câu (Tiêu chuẩn)</option>
+            <option value="10">10 câu (Toàn diện)</option>
+          </select>
+        </div>
+
+        <!-- Difficulty Level -->
+        <div class="form-group">
+          <label class="form-label">Mức độ khó</label>
+          <div class="segmented-control">
+            <label class="segment">
+              <input type="radio" name="difficulty" value="easy">
+              <span>Dễ</span>
+            </label>
+            <label class="segment">
+              <input type="radio" name="difficulty" value="medium" checked>
+              <span>Vừa</span>
+            </label>
+            <label class="segment">
+              <input type="radio" name="difficulty" value="hard">
+              <span>Khó</span>
+            </label>
+          </div>
+        </div>
+
+
+
+        <div class="form-actions full-width">
+          <button type="submit" id="btnGenerate" class="btn-primary btn-lg">
+            <span class="btn-text">🚀 Bắt đầu làm bài</span>
+            <span class="spinner hidden"></span>
+          </button>
+        </div>
+      </form>
+    </section>
+
+    <!-- Loading State View -->
+    <div id="loadingView" class="loading-container hidden">
+      <div class="pulse-loader"></div>
+      <h3 id="loadingText">Đang chuẩn bị bài thi...</h3>
+      <p id="loadingSubText">Hệ thống đang kiểm tra kho câu hỏi CSDL và kết nối AI</p>
+    </div>
+
+    <!-- View 2: Active Quiz View (Taking Quiz) -->
+    <section id="quizSection" class="card hidden fade-in">
+      <div class="quiz-topbar">
+        <div>
+          <span id="quizSourceBadge" class="badge badge-success">⚡ Kho CSDL</span>
+          <h2 id="quizTitle">Bài kiểm tra</h2>
+          <span id="quizMeta" class="meta-tag">Chủ đề: Python | 3 câu</span>
+        </div>
+        <div class="quiz-timer">
+          <span class="timer-icon">⏱️</span>
+          <span id="quizTimerText">00:00</span>
+        </div>
+      </div>
+
+      <!-- Question List Container -->
+      <div id="questionsContainer" class="questions-list"></div>
+
+      <div class="quiz-submit-bar">
+        <button id="btnCancelQuiz" class="btn-outline">Hủy bỏ</button>
+        <button id="btnSubmitQuiz" class="btn-primary btn-lg">
+          <span class="btn-text">📤 Nộp bài & Xem đánh giá</span>
+          <span class="spinner hidden"></span>
+        </button>
+      </div>
+    </section>
+
+    <!-- View 3: Result & AI Evaluator Insights View -->
+    <section id="resultSection" class="card hidden fade-in">
+      <div class="result-hero">
+        <div class="score-circle-container">
+          <div class="score-circle" id="scoreCircle">
+            <span id="scorePercentage" class="score-number">0%</span>
+            <span id="scoreRatio" class="score-sub">0/0 câu</span>
+          </div>
+        </div>
+
+        <div class="result-summary-text">
+          <div class="badge-row">
+            <span id="telemetryBadge" class="badge badge-info">⏱️ 15ms | 🪙 0 Token</span>
+            <span id="resultSourceBadge" class="badge badge-purple">⚡ Nguồn: Kho câu hỏi</span>
+          </div>
+          <h2 id="resultHeadline">Hoàn thành bài kiểm tra!</h2>
+          <p id="resultSubHeadline">Đã lưu kết quả vào cơ sở dữ liệu học tập cá nhân.</p>
+        </div>
+      </div>
+
+      <!-- AI Evaluator Section -->
+      <div id="evaluatorContainer" class="evaluator-card">
+        <div class="eval-header">
+          <span class="eval-icon">🤖</span>
+          <div>
+            <h3>Đánh giá Sư phạm từ Evaluator Agent</h3>
+            <p>Phân tích lỗ hổng kiến thức, ngộ nhận khái niệm và kế hoạch khắc phục.</p>
+          </div>
+        </div>
+
+        <div class="eval-body">
+          <!-- Strengths -->
+          <div id="strengthsBox" class="insight-box insight-success">
+            <h4>🌟 Điểm mạnh đã nắm vững:</h4>
+            <ul id="strengthsList"></ul>
+          </div>
+
+          <!-- Knowledge Gaps -->
+          <div id="gapsBox" class="insight-box insight-warning">
+            <h4>🔍 Lỗ hổng kiến thức phát hiện được:</h4>
+            <ul id="gapsList"></ul>
+          </div>
+
+          <!-- Pedagogical Critique -->
+          <div class="insight-box insight-neutral">
+            <h4>💬 Nhận xét sư phạm chi tiết:</h4>
+            <p id="critiqueText" class="critique-content"></p>
+          </div>
+
+          <!-- Recommendations -->
+          <div id="recommendationsBox" class="insight-box insight-info">
+            <h4>💡 Khuyến nghị ôn tập:</h4>
+            <ul id="recommendationsList"></ul>
+          </div>
+
+          <!-- Improvement Plan -->
+          <div id="planBox" class="insight-box insight-action">
+            <h4>🚀 Kế hoạch hành động cải thiện:</h4>
+            <p id="planText" class="plan-content"></p>
+          </div>
+        </div>
+      </div>
+
+      <!-- Question Review Breakdown -->
+      <div class="card-inner-section">
+        <h3>Chi tiết từng câu hỏi & Ngộ nhận lý thuyết:</h3>
+        <div id="reviewQuestionsContainer" class="review-list"></div>
+      </div>
+
+      <div class="result-actions">
+        <button id="btnRetake" class="btn-primary">🔄 Làm bài kiểm tra khác</button>
+        <button id="btnViewHistoryFromResult" class="btn-outline">📜 Xem lịch sử học tập</button>
+      </div>
+    </section>
+
+  </main>
+
+  <!-- Modal: History and Profile -->
+  <div id="historyModal" class="modal-overlay hidden">
+    <div class="modal-card">
+      <div class="modal-header">
+        <h3>Lịch sử học tập & Hồ sơ học sinh</h3>
+        <button id="btnCloseModal" class="modal-close">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div id="profileSummaryBox" class="profile-stats-grid"></div>
+
+        <h4>Các bài kiểm tra gần đây:</h4>
+        <div id="historyList" class="history-list"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal: Create New Student -->
+  <div id="newStudentModal" class="modal-overlay hidden">
+    <div class="modal-card modal-sm">
+      <div class="modal-header">
+        <h3>Đăng ký hồ sơ học sinh mới</h3>
+        <button id="btnCloseNewStudentModal" class="modal-close">&times;</button>
+      </div>
+      <form id="newStudentForm" class="modal-body">
+        <div class="form-group">
+          <label class="form-label">Họ và tên học sinh <span class="required">*</span></label>
+          <input type="text" id="newStudentName" class="form-control" placeholder="Ví dụ: Nguyễn Văn A" required>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Mã ID / Username <span class="required">*</span></label>
+          <input type="text" id="newStudentId" class="form-control" placeholder="Ví dụ: student_nguyenvana" required>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Khối / Lớp</label>
+          <input type="text" id="newStudentGrade" class="form-control" placeholder="Ví dụ: Lớp 12">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Trường học</label>
+          <input type="text" id="newStudentSchool" class="form-control" placeholder="Ví dụ: THPT Chuyên">
+        </div>
+        <div class="form-actions">
+          <button type="submit" class="btn-primary full-width">Lưu hồ sơ</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <script src="/static/app.js"></script>
+</body>
+</html>

@@ -15,6 +15,7 @@ from asas.modules.quiz.service import (
     QuizService,
     sanitize_topic,
     shuffle_quiz_options,
+    sanitize_option_text,
 )
 
 
@@ -228,3 +229,14 @@ async def test_generate_quiz_overrides_topic_difficulty_keyword(mock_llm_client,
     assert "chủ đề: 'Python'" in user_prompt
     assert "Mức độ khó bắt buộc: easy" in user_prompt
 
+
+
+def test_sanitize_option_text():
+    """Kiểm tra làm sạch tiền tố và chữ cái đáp án dính liền vào từ."""
+    assert sanitize_option_text("A. Normalization", "A") == "Normalization"
+    assert sanitize_option_text("B) Database Design", "B") == "Database Design"
+    assert sanitize_option_text("C: SQL Query", "C") == "SQL Query"
+    assert sanitize_option_text("[D] Indexing", "D") == "Indexing"
+    assert sanitize_option_text("ANormalization", "A") == "Normalization"
+    assert sanitize_option_text("BDatabase", "B") == "Database"
+    assert sanitize_option_text("Pure Text Option", "A") == "Pure Text Option"

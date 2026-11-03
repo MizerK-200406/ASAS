@@ -1,4 +1,4 @@
-"""Playground Script - Trải nghiệm trực tiếp AI Assessment System (ASAS) với Evaluator Agent."""
+"""Playground Script - Trải nghiệm trực tiếp AI Assessment System (ASAS) với Evaluator Agent và Ngân hàng câu hỏi Hybrid."""
 
 import asyncio
 import os
@@ -38,13 +38,17 @@ async def main():
         print(f"❌ Lỗi cấu hình: Hãy kiểm tra file .env đã có NVIDIA_API_KEY chưa!\nChi tiết: {e}")
         return
 
-    llm_client = LLMClient()
-    evaluator_agent = EvaluatorAgent(llm_client=llm_client)
-    quiz_service = QuizService(llm_client=llm_client, evaluator_agent=evaluator_agent)
-
     # Khởi tạo Memory Service
     memory_service = MemoryService()
     await memory_service.initialize()
+
+    llm_client = LLMClient()
+    evaluator_agent = EvaluatorAgent(llm_client=llm_client)
+    quiz_service = QuizService(
+        llm_client=llm_client,
+        evaluator_agent=evaluator_agent,
+        memory_service=memory_service,
+    )
 
     # -------------------------------------------------------------
     # Quản lý danh tính học sinh (Identity & Profile Selection)
@@ -111,7 +115,7 @@ async def main():
     grade_badge = f"[{student_profile.grade_level}]" if student_profile.grade_level else ""
     school_badge = f"- {student_profile.school}" if student_profile.school else ""
     print(f"\n👋 Đã đăng nhập: {student_profile.name} {grade_badge} {school_badge} (Mã ID: {student_profile.student_id})")
-    print("✨ Hệ thống Hồ sơ cá nhân hóa & Evaluator Agent đã sẵn sàng.\n")
+    print("✨ Hệ thống Hồ sơ cá nhân hóa, Ngân hàng câu hỏi & Evaluator Agent đã sẵn sàng.\n")
 
     while True:
         print("\n" + "=" * 50)
@@ -156,15 +160,34 @@ async def main():
                 )
                 topic = cleaned_topic
 
-            print(f"\n⏳ Đang yêu cầu AI thiết kế bộ câu hỏi về '{topic}' [Mức độ: {diff_label}], vui lòng chờ giây lát...")
+            print("\nChọn chế độ tạo câu hỏi:")
+            print("  1. Tự động (Ưu tiên kho ôn tập siêu tốc - 0 token, tức thì)")
+            print("  2. Bắt buộc tạo câu hỏi mới bằng AI (DeepSeek / NIM)")
+            mode_choice = input("Chọn chế độ (1/2, Enter để mặc định là 1): ").strip()
+            force_new_val = (mode_choice == "2")
+
+            print(f"\n⏳ Đang chuẩn bị bộ câu hỏi về '{topic}' [Mức độ: {diff_label}], vui lòng chờ giây lát...")
             try:
                 request = QuizGenerationRequest(
                     topic=topic,
                     num_questions=3,
                     difficulty=chosen_difficulty,
                     language="vi",
+                    force_new=force_new_val,
+                    student_id=student_id,
                 )
                 quiz = await quiz_service.generate_quiz(request)
+
+                # Hiển thị nguồn gốc đề thi
+                if quiz.source == "bank":
+                    print("⚡ [Nguồn: Kho câu hỏi CSDL - Tốc độ tức thì, 0 token AI]")
+                else:
+                    print("🤖 [Nguồn: AI DeepSeek mới sinh & đã lưu vào kho CSDL]")
+
+                # Hiển thị telemetry khi tạo đề nếu có gọi LLM
+                gen_rec = getattr(llm_client, "last_execution_record", None)
+                if gen_rec and quiz.source != "bank":
+                    print(f"⏱️  [Telemetry] Đã tạo đề xong trong {gen_rec.latency.duration_ms:.1f}ms | Token: {gen_rec.tokens.total_tokens}")
 
                 print(f"\n🎯 {quiz.title.upper()}")
                 user_answers = {}
@@ -223,6 +246,13 @@ async def main():
 
                     print("=" * 65)
 
+                    # Lấy telemetry từ lần gọi LLM
+                    exec_rec = getattr(llm_client, "last_execution_record", None)
+                    dur_ms = exec_rec.latency.duration_ms if exec_rec else 0.0
+                    p_toks = exec_rec.tokens.prompt_tokens if exec_rec else 0
+                    c_toks = exec_rec.tokens.completion_tokens if exec_rec else 0
+                    tot_toks = exec_rec.tokens.total_tokens if exec_rec else 0
+
                     # Lưu kết quả vào CSDL PostgreSQL
                     praise_str = ", ".join(evaluation.strengths) if evaluation.strengths else None
                     critique_str = evaluation.critique
@@ -237,8 +267,20 @@ async def main():
                         ai_praise=praise_str,
                         ai_critique=critique_str,
                         improvement_plan=plan_str,
+                        duration_ms=dur_ms,
+                        prompt_tokens=p_toks,
+                        completion_tokens=c_toks,
+                        total_tokens=tot_toks,
                     )
                     print(f"\n💾 [Memory] Đã lưu kết quả bài thi #{record_id} kèm phân tích của AI vào hồ sơ!")
+
+                    # Đánh dấu các câu hỏi trong ngân hàng đã làm để không lặp lại
+                    q_ids = [q.id for q in quiz.questions if q.id is not None]
+                    if q_ids:
+                        await memory_service.mark_questions_answered(student_id=student_id, question_ids=q_ids)
+
+                    if exec_rec:
+                        print(f"⏱️  [Telemetry] Đánh giá hoàn tất trong {dur_ms:.1f}ms | Token: {tot_toks} (Prompt: {p_toks}, Completion: {c_toks})")
 
                 except Exception as eval_err:
                     print(f"⚠️ Không thể thực thi Evaluator Agent: {eval_err}")
@@ -250,21 +292,23 @@ async def main():
                         correct_count=grade_result.correct_count,
                     )
 
-                # Hiển thị đáp án chi tiết
+                # Hiển thị đáp án chi tiết và ngộ nhận nếu có
                 print("\nChi tiết đáp án & giải thích:")
                 for d in grade_result.details:
                     status_badge = "✅ ĐÚNG" if d["is_correct"] else "❌ SAI"
                     print(f"- Câu {d['question_index'] + 1}: {status_badge} (Bạn chọn: {d['user_answer']} | Đáp án đúng: {d['correct_answer']})")
                     print(f"  💡 Giải thích: {d['explanation']}")
+                    if d.get("misconception"):
+                        print(f"  ⚠️ Ngộ nhận lý thuyết: {d['misconception']}")
 
             except Exception as e:
-                print(f"❌ Lỗi khi thực hiện Quiz: {e}")
+                print(f"\n❌ Lỗi khi thiết kế đề kiểm tra: {e}")
 
         elif choice == "2":
             print("\n" + "=" * 65)
-            print("📊 HỒ SƠ HỌC TẬP & DÒNG THỜI GIAN HOẠT ĐỘNG (POSTGRESQL DATABASE)")
+            print("📊 HỒ SƠ HỌC SINH & LỊCH SỬ HỌC TẬP")
             print("=" * 65)
-            summary = await memory_service.get_student_summary(student_id, activity_limit=10)
+            summary = await memory_service.get_student_summary(student_id=student_id)
             profile = summary["profile"]
             stats = summary["quiz_stats"]
             quizzes = summary.get("recent_quizzes", [])
@@ -325,6 +369,8 @@ async def main():
                         date_str = target_quiz.completed_at.strftime("%Y-%m-%d %H:%M:%S")
                         print(f"📅 Thời gian hoàn thành: {date_str}")
                         print(f"🎯 Điểm số: {target_quiz.score_percentage}% ({target_quiz.correct_count}/{target_quiz.total_questions} câu)")
+                        if target_quiz.duration_ms > 0:
+                            print(f"⏱️  Thời gian xử lý: {target_quiz.duration_ms:.1f}ms | Tổng token: {target_quiz.total_tokens} (Prompt: {target_quiz.prompt_tokens}, Completion: {target_quiz.completion_tokens})")
                         if target_quiz.ai_praise:
                             print(f"\n🌟 Điểm mạnh ghi nhận:\n   {target_quiz.ai_praise}")
                         if target_quiz.ai_critique:

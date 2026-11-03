@@ -26,3 +26,19 @@ def test_openapi_documentation_schema():
     assert "/api/v1/students/{student_id}" in paths
     assert "/api/v1/quiz/generate" in paths
     assert "/api/v1/quiz/grade" in paths
+
+
+def test_static_index_and_assets():
+    app = create_app()
+    client = TestClient(app)
+    response = client.get("/")
+    assert response.status_code == 200
+    assert "ASAS - AI Assessment System" in response.text
+
+    css_res = client.get("/static/style.css")
+    assert css_res.status_code == 200
+    assert ":root" in css_res.text
+
+    js_res = client.get("/static/app.js")
+    assert js_res.status_code == 200
+    assert "ASAS Frontend Application Logic" in js_res.text
