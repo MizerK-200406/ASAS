@@ -205,3 +205,33 @@ async def test_get_quiz_record_by_id_drilldown(repo):
     assert fetched.ai_praise == "Xuất sắc phần lịch sử cận đại"
     assert fetched.ai_critique == "Sai sót câu hỏi mốc thời gian 1945"
     assert fetched.improvement_plan == "Đọc lại SGK trang 120"
+
+
+@pytest.mark.asyncio
+async def test_get_quiz_record_by_id_with_student_id_isolation(repo):
+    """Kiểm tra chỉ xem được bài thi khi đúng student_id, tránh lộ đề/kết quả chéo."""
+    await repo.initialize()
+    await repo.get_or_create_student("student_owner", "Owner Student")
+    await repo.get_or_create_student("student_other", "Other Student")
+
+    record = QuizRecord(
+        student_id="student_owner",
+        topic="Lập trình mạng",
+        score_percentage=90.0,
+        total_questions=10,
+        correct_count=9,
+    )
+    quiz_id = await repo.save_quiz_record(record)
+
+    # Đúng chủ sở hữu -> xem được
+    owner_view = await repo.get_quiz_record_by_id(quiz_id=quiz_id, student_id="student_owner")
+    assert owner_view is not None
+    assert owner_view.id == quiz_id
+
+    # Khác chủ sở hữu -> không xem được (None)
+    other_view = await repo.get_quiz_record_by_id(quiz_id=quiz_id, student_id="student_other")
+    assert other_view is None
+
+    # Không truyền student_id -> xem được bình thường
+    admin_view = await repo.get_quiz_record_by_id(quiz_id=quiz_id)
+    assert admin_view is not None

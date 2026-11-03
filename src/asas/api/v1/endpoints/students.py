@@ -86,8 +86,8 @@ async def get_student_quiz_record(
     memory_service: MemoryService = Depends(get_memory_service),
 ) -> QuizRecord:
     """Xem chi tiết một bài thi trắc nghiệm (bao gồm các câu hỏi, đáp án và nhận xét AI)."""
-    record = await memory_service.get_quiz_record_by_id(record_id)
-    if not record or record.student_id != student_id:
+    record = await memory_service.get_quiz_record_by_id(quiz_id=record_id, student_id=student_id)
+    if not record:
         raise HTTPException(
             status_code=404,
             detail=f"Không tìm thấy bài thi #{record_id} của học sinh '{student_id}'.",

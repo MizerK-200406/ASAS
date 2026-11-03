@@ -238,12 +238,23 @@ class MemoryRepository:
                 for r in rows
             ]
 
-    async def get_quiz_record_by_id(self, quiz_id: int) -> Optional[QuizRecord]:
-        """Lấy chi tiết một bài quiz theo ID."""
+    async def get_quiz_record_by_id(
+        self,
+        quiz_id: int,
+        student_id: Optional[str] = None,
+    ) -> Optional[QuizRecord]:
+        """Lấy chi tiết một bài quiz theo ID (có lọc theo student_id để bảo vệ quyền riêng tư)."""
         async with get_db_connection(self.db_url) as conn:
-            r = await conn.fetchrow(
-                "SELECT * FROM quiz_records WHERE id = $1", quiz_id
-            )
+            if student_id:
+                r = await conn.fetchrow(
+                    "SELECT * FROM quiz_records WHERE id = $1 AND student_id = $2",
+                    quiz_id,
+                    student_id,
+                )
+            else:
+                r = await conn.fetchrow(
+                    "SELECT * FROM quiz_records WHERE id = $1", quiz_id
+                )
             if not r:
                 return None
             return QuizRecord(

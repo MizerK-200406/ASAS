@@ -98,9 +98,13 @@ class MemoryService:
         """Lấy danh sách tất cả học sinh đã đăng ký trong hệ thống."""
         return await self.repository.get_all_students()
 
-    async def get_quiz_record_by_id(self, quiz_id: int) -> Optional[QuizRecord]:
-        """Lấy chi tiết một bài quiz theo ID (Master-Detail pattern)."""
-        return await self.repository.get_quiz_record_by_id(quiz_id)
+    async def get_quiz_record_by_id(
+        self,
+        quiz_id: int,
+        student_id: Optional[str] = None,
+    ) -> Optional[QuizRecord]:
+        """Lấy chi tiết một bài quiz theo ID (Master-Detail pattern), có lọc theo student_id nếu được truyền."""
+        return await self.repository.get_quiz_record_by_id(quiz_id=quiz_id, student_id=student_id)
 
     async def get_quiz_history(
         self,
