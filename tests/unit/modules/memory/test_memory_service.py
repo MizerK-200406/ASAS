@@ -143,3 +143,60 @@ async def test_expanded_activity_stream(memory_service):
 
     summary = await memory_service.get_student_summary("st_user1")
     assert len(summary["recent_activities"]) == 10
+
+
+@pytest.mark.asyncio
+async def test_get_quiz_record_by_ordinal_or_id(memory_service):
+    """Kiểm tra tra cứu bài thi thông minh qua số thứ tự (STT) hoặc mã ID toàn cục."""
+    await memory_service.initialize()
+    await memory_service.get_or_create_student("st_user_multi", "Học sinh đa bài thi")
+    await memory_service.get_or_create_student("st_user_other", "Học sinh khác")
+
+    # Học sinh khác làm 1 bài thi trước (chiếm ID nhỏ hơn)
+    other_qid = await memory_service.record_quiz_result(
+        student_id="st_user_other",
+        topic="Triết học",
+        score_percentage=50.0,
+        total_questions=2,
+        correct_count=1,
+    )
+
+    # Học sinh chính làm 2 bài thi
+    qid1 = await memory_service.record_quiz_result(
+        student_id="st_user_multi",
+        topic="Python Cơ bản",
+        score_percentage=80.0,
+        total_questions=5,
+        correct_count=4,
+    )
+    qid2 = await memory_service.record_quiz_result(
+        student_id="st_user_multi",
+        topic="FastAPI Nâng cao",
+        score_percentage=100.0,
+        total_questions=3,
+        correct_count=3,
+    )
+
+    # 1. Tra cứu theo STT 1 (bài mới nhất của học sinh: FastAPI)
+    q_stt1 = await memory_service.get_quiz_record_by_ordinal_or_id("st_user_multi", "1")
+    assert q_stt1 is not None
+    assert q_stt1.id == qid2
+    assert q_stt1.topic == "FastAPI Nâng cao"
+
+    # 2. Tra cứu theo STT 2 (bài trước đó: Python)
+    q_stt2 = await memory_service.get_quiz_record_by_ordinal_or_id("st_user_multi", "2")
+    assert q_stt2 is not None
+    assert q_stt2.id == qid1
+    assert q_stt2.topic == "Python Cơ bản"
+
+    # 3. Tra cứu theo mã ID toàn cục với tiền tố #
+    q_hash = await memory_service.get_quiz_record_by_ordinal_or_id("st_user_multi", f"#{qid1}")
+    assert q_hash is not None
+    assert q_hash.id == qid1
+
+    # 4. Tra cứu bài của người khác -> trả về None (Bảo vệ quyền riêng tư)
+    q_forbidden = await memory_service.get_quiz_record_by_ordinal_or_id("st_user_multi", f"#{other_qid}")
+    assert q_forbidden is None
+
+    # 5. Ký tự không hợp lệ -> None
+    assert await memory_service.get_quiz_record_by_ordinal_or_id("st_user_multi", "abc") is None

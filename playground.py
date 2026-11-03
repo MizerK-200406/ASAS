@@ -289,9 +289,9 @@ async def main():
             if not quizzes:
                 print("  (Chưa có bài kiểm tra nào. Bạn hãy chọn mục 1 ở Menu chính để bắt đầu làm bài!)")
             else:
-                for qz in quizzes:
+                for idx, qz in enumerate(quizzes, 1):
                     date_str = qz.completed_at.strftime("%Y-%m-%d %H:%M") if qz.completed_at else ""
-                    print(f"  - [#{qz.id}] {qz.topic}: {qz.score_percentage}% ({qz.correct_count}/{qz.total_questions} câu) - {date_str}")
+                    print(f"  {idx}. [Mã #{qz.id}] {qz.topic}: {qz.score_percentage}% ({qz.correct_count}/{qz.total_questions} câu) - {date_str}")
 
             print("\n🕒 DÒNG THỜI GIAN HOẠT ĐỘNG GẦN NHẤT:")
             if not activities:
@@ -301,39 +301,40 @@ async def main():
                     act_date = act.created_at.strftime("%Y-%m-%d %H:%M")
                     print(f"  {idx}. [{act_date}] 🎯 [{act.action_type}] {act.description}")
 
-            # Tra cứu chi tiết bài Quiz theo mã ID khi cần
+            # Tra cứu chi tiết bài Quiz theo số thứ tự hoặc mã ID
             print("\n" + "-" * 65)
             if not quizzes:
                 print("💡 Bạn chưa có bài kiểm tra nào để xem lại chi tiết.")
                 input("\n👉 Nhấn Enter để quay lại menu chính...")
             else:
-                suggested_example = f"#{quizzes[0].id}"
-                detail_choice = input(f"👉 Nhập mã bài thi của bạn (VD: {suggested_example}) để xem lại phân tích lỗi sai từ AI (Enter để quay lại): ").strip()
+                suggested_example = "1" if len(quizzes) == 1 else f"1 hoặc #{quizzes[0].id}"
+                detail_choice = input(
+                    f"👉 Nhập số thứ tự (1..{len(quizzes)}) hoặc mã bài (VD: {suggested_example}) "
+                    "để xem chi tiết (Enter để quay lại): "
+                ).strip()
                 if detail_choice:
-                    clean_id = detail_choice.lstrip("#")
-                    if clean_id.isdigit():
-                        target_quiz = await memory_service.get_quiz_record_by_id(quiz_id=int(clean_id), student_id=student_id)
-                        if target_quiz:
-                            print("\n" + "=" * 65)
-                            badge_id = f"#{target_quiz.id} " if target_quiz.id else ""
-                            print(f"🔍 CHI TIẾT BÀI KIỂM TRA {badge_id}- CHỦ ĐỀ: {target_quiz.topic.upper()}")
-                            print("=" * 65)
-                            date_str = target_quiz.completed_at.strftime("%Y-%m-%d %H:%M:%S")
-                            print(f"📅 Thời gian hoàn thành: {date_str}")
-                            print(f"🎯 Điểm số: {target_quiz.score_percentage}% ({target_quiz.correct_count}/{target_quiz.total_questions} câu)")
-                            if target_quiz.ai_praise:
-                                print(f"\n🌟 Điểm mạnh ghi nhận:\n   {target_quiz.ai_praise}")
-                            if target_quiz.ai_critique:
-                                print(f"\n💬 Nhận xét sư phạm & Góp ý từ AI:\n   {target_quiz.ai_critique}")
-                            if target_quiz.improvement_plan:
-                                print(f"\n🚀 Kế hoạch cải thiện đề xuất:\n   {target_quiz.improvement_plan}")
-                            print("=" * 65)
-                            input("\n👉 Nhấn Enter để quay lại menu chính...")
-                        else:
-                            print(f"❌ Không tìm thấy bài kiểm tra #{clean_id} thuộc về học sinh {profile.name} (Mã ID: {student_id}).")
-                            input("\n👉 Nhấn Enter để quay lại menu chính...")
+                    target_quiz = await memory_service.get_quiz_record_by_ordinal_or_id(
+                        student_id=student_id,
+                        identifier=detail_choice,
+                    )
+                    if target_quiz:
+                        print("\n" + "=" * 65)
+                        badge_id = f"#{target_quiz.id} " if target_quiz.id else ""
+                        print(f"🔍 CHI TIẾT BÀI KIỂM TRA {badge_id}- CHỦ ĐỀ: {target_quiz.topic.upper()}")
+                        print("=" * 65)
+                        date_str = target_quiz.completed_at.strftime("%Y-%m-%d %H:%M:%S")
+                        print(f"📅 Thời gian hoàn thành: {date_str}")
+                        print(f"🎯 Điểm số: {target_quiz.score_percentage}% ({target_quiz.correct_count}/{target_quiz.total_questions} câu)")
+                        if target_quiz.ai_praise:
+                            print(f"\n🌟 Điểm mạnh ghi nhận:\n   {target_quiz.ai_praise}")
+                        if target_quiz.ai_critique:
+                            print(f"\n💬 Nhận xét sư phạm & Góp ý từ AI:\n   {target_quiz.ai_critique}")
+                        if target_quiz.improvement_plan:
+                            print(f"\n🚀 Kế hoạch cải thiện đề xuất:\n   {target_quiz.improvement_plan}")
+                        print("=" * 65)
+                        input("\n👉 Nhấn Enter để quay lại menu chính...")
                     else:
-                        print("⚠️ Mã bài thi không hợp lệ.")
+                        print(f"❌ Không tìm thấy bài kiểm tra phù hợp với lựa chọn '{detail_choice}' của học sinh {profile.name}.")
                         input("\n👉 Nhấn Enter để quay lại menu chính...")
 
         else:

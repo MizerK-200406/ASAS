@@ -106,6 +106,49 @@ class MemoryService:
         """Lấy chi tiết một bài quiz theo ID (Master-Detail pattern), có lọc theo student_id nếu được truyền."""
         return await self.repository.get_quiz_record_by_id(quiz_id=quiz_id, student_id=student_id)
 
+    async def get_quiz_record_by_ordinal_or_id(
+        self,
+        student_id: str,
+        identifier: str,
+        limit: int = 50,
+    ) -> Optional[QuizRecord]:
+        """
+        Tra cứu bài thi thông minh cho học sinh:
+        - Nếu có tiền tố '#' (VD: #1), tra cứu theo ID toàn cục của bài thi.
+        - Nếu là số nguyên thông thường (VD: 1, 2):
+          + Ưu tiên đối chiếu với Số Thứ Tự (STT 1-based) trong lịch sử bài thi của học sinh.
+          + Nếu vượt quá STT, tiếp tục đối chiếu theo ID toàn cục của học sinh đó.
+        Đảm bảo không bao giờ truy cập chéo bài thi của học sinh khác.
+        """
+        raw = identifier.strip()
+        is_hash = raw.startswith("#")
+        clean_str = raw.lstrip("#")
+        if not clean_str.isdigit():
+            return None
+
+        val = int(clean_str)
+        quizzes = await self.get_quiz_history(student_id=student_id, limit=limit)
+        if not quizzes:
+            return None
+
+        # 1. Nếu có dấu #, tìm theo ID bài thi
+        if is_hash:
+            for q in quizzes:
+                if q.id == val:
+                    return q
+            return await self.get_quiz_record_by_id(quiz_id=val, student_id=student_id)
+
+        # 2. Nếu là số thường: ưu tiên STT trong danh sách của học sinh
+        if 1 <= val <= len(quizzes):
+            return quizzes[val - 1]
+
+        # 3. Dự phòng tìm theo ID nếu số nhập vượt quá phạm vi STT
+        for q in quizzes:
+            if q.id == val:
+                return q
+
+        return await self.get_quiz_record_by_id(quiz_id=val, student_id=student_id)
+
     async def get_quiz_history(
         self,
         student_id: str,
