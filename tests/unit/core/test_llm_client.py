@@ -168,3 +168,40 @@ async def test_structured_output_repairs_truncated_json_array(dummy_settings):
         assert len(result.questions) == 1
         assert result.questions[0].q == "What is main branch?"
         assert result.questions[0].ans == "Production code"
+
+
+@pytest.mark.asyncio
+async def test_structured_output_retries_on_initial_failure(dummy_settings):
+    """Kiểm tra khi lần đầu mô hình chỉ trả về reasoning không có JSON, hệ thống tự động thử lại và thành công."""
+    client = LLMClient(settings=dummy_settings)
+
+    # Lần 1: Trả về reasoning text không có JSON
+    mock_choice1 = MagicMock()
+    mock_choice1.message.content = ""
+    mock_choice1.message.reasoning_content = "We need to generate a quiz... Now we need to distribute A, B, C, D"
+    mock_choice1.finish_reason = "length"
+    mock_resp1 = MagicMock()
+    mock_resp1.choices = [mock_choice1]
+
+    # Lần 2: Trả về JSON hợp lệ sau khi được nhắc nhở
+    mock_choice2 = MagicMock()
+    mock_choice2.message.content = '{"name": "Python Retry", "score": 100}'
+    mock_choice2.finish_reason = "stop"
+    mock_resp2 = MagicMock()
+    mock_resp2.choices = [mock_choice2]
+
+    with patch.object(
+        client.client.chat.completions, "create", new_callable=AsyncMock
+    ) as mock_create:
+        mock_create.side_effect = [mock_resp1, mock_resp2]
+
+        messages = [{"role": "user", "content": "Tạo dữ liệu"}]
+        result = await client.structured_output(
+            messages=messages,
+            response_model=SampleSchema,
+        )
+
+        assert isinstance(result, SampleSchema)
+        assert result.name == "Python Retry"
+        assert result.score == 100
+        assert mock_create.await_count == 2

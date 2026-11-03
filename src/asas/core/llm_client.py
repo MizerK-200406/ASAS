@@ -179,47 +179,75 @@ class LLMClient:
                 },
             )
 
-        raw_text = ""
-        try:
-            # Lưu ý: Không ép cứng response_format={"type": "json_object"} vì trên NVIDIA NIM,
-            # một số phiên bản DeepSeek Reasoning (Flash/R1) sẽ đẩy toàn bộ nội dung vào reasoning_content và để content=None.
-            response = await self.client.chat.completions.create(
-                model=target_model,
-                messages=formatted_messages,  # type: ignore[arg-type]
-                temperature=temperature,
-                max_tokens=max_tokens,
-            )
-            choice = response.choices[0]
-            finish_reason = getattr(choice, "finish_reason", None)
-            if finish_reason == "length":
-                logger.warning(
-                    f"LLM phản hồi chạm trần max_tokens ({max_tokens}). Sẽ kích hoạt cơ chế tự phục hồi JSON nếu cần."
-                )
+        current_temp = temperature
+        last_error: Optional[Exception] = None
 
-            message = choice.message
-            # Hỗ trợ lấy content và fallback reasoning_content nếu là reasoning model
-            raw_text = message.content or getattr(message, "reasoning_content", "") or ""
-            clean_text = self._clean_json_text(raw_text)
-
+        for attempt in range(2):
+            raw_text = ""
             try:
-                return response_model.model_validate_json(clean_text)
-            except (json.JSONDecodeError, ValidationError):
-                # Kích hoạt cơ chế tự động sửa lỗi JSON bị cắt cụt
-                repaired_text = self._repair_truncated_json(raw_text)
-                if repaired_text != clean_text:
-                    try:
-                        return response_model.model_validate_json(repaired_text)
-                    except (json.JSONDecodeError, ValidationError):
-                        pass
+                # Lưu ý: Không ép cứng response_format={"type": "json_object"} vì trên NVIDIA NIM,
+                # một số phiên bản DeepSeek Reasoning (Flash/R1) sẽ đẩy toàn bộ nội dung vào reasoning_content và để content=None.
+                response = await self.client.chat.completions.create(
+                    model=target_model,
+                    messages=formatted_messages,  # type: ignore[arg-type]
+                    temperature=current_temp,
+                    max_tokens=max_tokens,
+                )
+                choice = response.choices[0]
+                finish_reason = getattr(choice, "finish_reason", None)
+                if finish_reason == "length":
+                    logger.warning(
+                        f"LLM phản hồi chạm trần max_tokens ({max_tokens}). Sẽ kích hoạt cơ chế tự phục hồi JSON nếu cần."
+                    )
+
+                message = choice.message
+                content_text = message.content or ""
+                reasoning_text = getattr(message, "reasoning_content", "") or ""
+
+                # Ưu tiên lấy từ content nếu có chứa ký tự JSON
+                if "{" in content_text and "}" in content_text:
+                    raw_text = content_text
+                elif "{" in reasoning_text and "}" in reasoning_text:
+                    raw_text = reasoning_text
+                else:
+                    raw_text = content_text or reasoning_text
+
+                clean_text = self._clean_json_text(raw_text)
+
+                try:
+                    return response_model.model_validate_json(clean_text)
+                except (json.JSONDecodeError, ValidationError):
+                    # Kích hoạt cơ chế tự động sửa lỗi JSON bị cắt cụt
+                    repaired_text = self._repair_truncated_json(raw_text)
+                    if repaired_text != clean_text:
+                        try:
+                            return response_model.model_validate_json(repaired_text)
+                        except (json.JSONDecodeError, ValidationError):
+                            pass
+                    raise
+            except (json.JSONDecodeError, ValidationError) as e:
+                last_error = e
+                if attempt == 0:
+                    logger.warning(
+                        f"[LLMClient] Lần 1 không thể parse JSON ({e}). Tự động thử lại với lời nhắc xuất JSON trực tiếp..."
+                    )
+                    formatted_messages.append({
+                        "role": "user",
+                        "content": "LƯU Ý QUAN TRỌNG: Hãy bỏ qua toàn bộ suy nghĩ (reasoning) dài dòng. Xuất NGAY LẬP TỨC toàn bộ dữ liệu dưới dạng JSON hợp lệ theo schema.",
+                    })
+                    current_temp = 0.1
+                    continue
+                logger.error(f"Không thể parse dữ liệu từ LLM sau {attempt + 1} lần thử: {e}. Raw content: {raw_text[:500]}...")
+                raise LLMParseError(f"Không thể parse JSON sang {response_model.__name__}: {str(e)}") from e
+            except APIError as e:
+                logger.error(f"Lỗi API khi gọi LLM: {e}")
+                raise LLMClientError(f"API Error: {str(e)}") from e
+            except LLMClientError:
                 raise
-        except (json.JSONDecodeError, ValidationError) as e:
-            logger.error(f"Không thể parse dữ liệu từ LLM: {e}. Raw content: {raw_text}")
-            raise LLMParseError(f"Không thể parse JSON sang {response_model.__name__}: {str(e)}") from e
-        except APIError as e:
-            logger.error(f"Lỗi API khi gọi LLM: {e}")
-            raise LLMClientError(f"API Error: {str(e)}") from e
-        except LLMClientError:
-            raise
-        except Exception as e:
-            logger.error(f"Lỗi ngoài dự kiến: {e}")
-            raise LLMClientError(f"Lỗi khi thực thi: {str(e)}") from e
+            except Exception as e:
+                logger.error(f"Lỗi ngoài dự kiến: {e}")
+                raise LLMClientError(f"Lỗi khi thực thi: {str(e)}") from e
+
+        if last_error:
+            raise LLMParseError(f"Không thể parse JSON sang {response_model.__name__}: {str(last_error)}") from last_error
+        raise LLMClientError("Không nhận được phản hồi hợp lệ từ mô hình.")

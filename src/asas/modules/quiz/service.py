@@ -82,7 +82,7 @@ class QuizService:
             "2. Các phương án sai (distractors) phải hợp lý, phản ánh đúng những lỗi sai phổ biến của người học.\n"
             "3. Duy nhất một đáp án đúng chính xác tuyệt đối.\n"
             "4. Phần giải thích (explanation) phải ngắn gọn, súc tích và chỉ rõ tại sao đáp án đó là đúng về mặt kiến thức, tránh viết phụ thuộc cứng vào nhãn 'Đáp án A'.\n"
-            "5. Phân bổ ngẫu nhiên vị trí đáp án đúng đều giữa A, B, C, D thay vì luôn đặt ở đáp án A.\n"
+            "5. Không cần bận tâm về việc cân đối vị trí đáp án đúng (hệ thống sẽ tự động xáo trộn ngẫu nhiên sau khi tạo). Hãy tập trung xuất trực tiếp JSON nhanh chóng, chính xác và cô đọng.\n"
             "6. Tuyệt đối không sinh các cặp ngoặc rỗng ({}, }}). Giữ nội dung cô đọng để hoàn tất đầy đủ cấu trúc JSON."
         )
 
@@ -92,6 +92,7 @@ class QuizService:
             f"- Mức độ khó bắt buộc: {request.difficulty.value} (Nếu chủ đề có từ khóa gợi ý độ khó khác, hãy bỏ qua và tuân thủ tuyệt đối mức độ này).\n"
             f"- Ngôn ngữ yêu cầu: {request.language}\n"
             f"- Đảm bảo mỗi câu hỏi có 4 lựa chọn (A, B, C, D) với correct_answer_id hợp lệ.\n"
+            "- Không cần bận tâm về việc xáo trộn đáp án đúng (hệ thống backend sẽ tự động xáo trộn sau khi nhận kết quả).\n"
             "- Hãy hoàn tất đầy đủ mọi câu hỏi và đóng mảng JSON đúng cú pháp."
         )
 
@@ -103,7 +104,8 @@ class QuizService:
         quiz = await self.llm_client.structured_output(
             messages=messages,
             response_model=Quiz,
-            temperature=0.4,
+            temperature=0.3,
+            max_tokens=6144,
         )
 
         # Cập nhật topic đã được làm sạch

@@ -85,7 +85,8 @@ async def test_generate_quiz_success(mock_llm_client, sample_quiz):
     messages = called_kwargs["messages"]
     assert any("Python Basics" in msg["content"] for msg in messages)
     assert any("easy" in msg["content"] or "EASY" in msg["content"] for msg in messages)
-    assert called_kwargs.get("temperature") == 0.4
+    assert called_kwargs.get("temperature") == 0.3
+    assert called_kwargs.get("max_tokens") == 6144
 
 
 @pytest.mark.asyncio
