@@ -22,7 +22,7 @@ from asas.core.llm_client import LLMClient
 from asas.modules.agents.evaluator import EvaluatorAgent
 from asas.modules.memory.service import MemoryService
 from asas.modules.quiz.schemas import DifficultyLevel, QuizGenerationRequest
-from asas.modules.quiz.service import QuizService
+from asas.modules.quiz.service import QuizService, sanitize_topic
 
 
 async def main():
@@ -131,12 +131,37 @@ async def main():
             if not topic:
                 topic = "Python Basics"
 
-            print(f"\n⏳ Đang yêu cầu AI thiết kế bộ câu hỏi về '{topic}', vui lòng chờ giây lát...")
+            print("\nChọn mức độ khó:")
+            print("  1. Dễ (Easy)")
+            print("  2. Trung bình (Medium - Mặc định)")
+            print("  3. Khó (Hard)")
+            diff_input = input("Chọn mức độ (1/2/3, Enter để mặc định là Trung bình): ").strip().lower()
+
+            if diff_input in ("1", "easy", "dễ", "de"):
+                chosen_difficulty = DifficultyLevel.EASY
+                diff_label = "Dễ (Easy)"
+            elif diff_input in ("3", "hard", "khó", "kho"):
+                chosen_difficulty = DifficultyLevel.HARD
+                diff_label = "Khó (Hard)"
+            else:
+                chosen_difficulty = DifficultyLevel.MEDIUM
+                diff_label = "Trung bình (Medium)"
+
+            # Kiểm tra và làm sạch chủ đề nếu người dùng vô tình nhập kèm mức độ trong chuỗi chủ đề
+            cleaned_topic = sanitize_topic(topic)
+            if cleaned_topic != topic:
+                print(
+                    f"💡 Phát hiện từ khóa mức độ trong tên chủ đề. Hệ thống sẽ áp dụng mức độ "
+                    f"'{diff_label}' bạn đã lựa chọn cho chủ đề '{cleaned_topic}'."
+                )
+                topic = cleaned_topic
+
+            print(f"\n⏳ Đang yêu cầu AI thiết kế bộ câu hỏi về '{topic}' [Mức độ: {diff_label}], vui lòng chờ giây lát...")
             try:
                 request = QuizGenerationRequest(
                     topic=topic,
                     num_questions=3,
-                    difficulty=DifficultyLevel.EASY,
+                    difficulty=chosen_difficulty,
                     language="vi",
                 )
                 quiz = await quiz_service.generate_quiz(request)

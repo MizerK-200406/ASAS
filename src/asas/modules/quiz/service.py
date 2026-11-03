@@ -1,4 +1,6 @@
-from typing import Dict, Optional
+import random
+import re
+from typing import Dict, List, Optional
 from loguru import logger
 
 from asas.core.llm_client import LLMClient
@@ -8,7 +10,50 @@ from asas.modules.quiz.schemas import (
     Quiz,
     QuizGenerationRequest,
     QuizGradeResult,
+    QuizOption,
+    QuizQuestion,
 )
+
+DIFFICULTY_PATTERNS = [
+    r"(?i)\s*[\(\[\{]\s*(?:mức\s*độ|độ\s*khó|cấp\s*độ|level)?\s*[:=\-]?\s*(?:dễ|cơ\s*bản|trung\s*bình|vừa|khó|nâng\s*cao|chuyên\s*sâu|easy|medium|hard|basic|intermediate|advanced)\s*[\)\]\}]",
+    r"(?i)\s*[-–—:]\s*(?:mức\s*độ|độ\s*khó|cấp\s*độ|level)?\s*[:=\-]?\s*(?:dễ|cơ\s*bản|trung\s*bình|vừa|khó|nâng\s*cao|chuyên\s*sâu|easy|medium|hard|basic|intermediate|advanced)\s*$",
+    r"(?i)\s*(?:mức\s*độ|độ\s*khó|cấp\s*độ|level)\s*[:=\-]?\s*(?:dễ|cơ\s*bản|trung\s*bình|vừa|khó|nâng\s*cao|chuyên\s*sâu|easy|medium|hard|basic|intermediate|advanced)\b",
+    r"(?i)\s+\b(?:dễ|cơ\s*bản|nâng\s*cao|khó|easy|hard|medium)\b\s*$",
+]
+
+
+def sanitize_topic(topic: str) -> str:
+    """Loại bỏ các từ khóa chỉ mức độ/độ khó khỏi chuỗi chủ đề nếu người dùng vô tình nhập kèm."""
+    cleaned = topic.strip()
+    for pattern in DIFFICULTY_PATTERNS:
+        cleaned = re.sub(pattern, "", cleaned).strip()
+    return cleaned if cleaned else topic.strip()
+
+
+def shuffle_quiz_options(quiz: Quiz) -> Quiz:
+    """Xáo trộn ngẫu nhiên các lựa chọn đáp án và cập nhật lại correct_answer_id để phân bổ đều vị trí A, B, C, D."""
+    for q in quiz.questions:
+        if not q.options or len(q.options) <= 1:
+            continue
+
+        target_opt_id = q.correct_answer_id
+        options = list(q.options)
+        random.shuffle(options)
+
+        standard_labels = [chr(ord("A") + i) for i in range(len(options))]
+        new_correct_id = target_opt_id
+        new_options: List[QuizOption] = []
+
+        for idx, opt in enumerate(options):
+            new_id = standard_labels[idx]
+            if opt.id == target_opt_id:
+                new_correct_id = new_id
+            new_options.append(QuizOption(id=new_id, text=opt.text))
+
+        q.options = new_options
+        q.correct_answer_id = new_correct_id
+
+    return quiz
 
 
 class QuizService:
@@ -24,9 +69,10 @@ class QuizService:
 
     async def generate_quiz(self, request: QuizGenerationRequest) -> Quiz:
         """Tạo bộ câu hỏi trắc nghiệm chất lượng cao dựa trên yêu cầu của học sinh."""
+        cleaned_topic = sanitize_topic(request.topic)
         logger.info(
-            f"Bắt đầu tạo quiz cho chủ đề: '{request.topic}' | "
-            f"Số câu: {request.num_questions} | Độ khó: {request.difficulty.value}"
+            f"Bắt đầu tạo quiz cho chủ đề: '{cleaned_topic}' (Gốc: '{request.topic}') | "
+            f"Số câu: {request.num_questions} | Độ khó chỉ định: {request.difficulty.value}"
         )
 
         system_prompt = (
@@ -35,14 +81,15 @@ class QuizService:
             "1. Câu hỏi rõ ràng, tập trung vào bản chất khái niệm hoặc ứng dụng thực tế.\n"
             "2. Các phương án sai (distractors) phải hợp lý, phản ánh đúng những lỗi sai phổ biến của người học.\n"
             "3. Duy nhất một đáp án đúng chính xác tuyệt đối.\n"
-            "4. Phần giải thích (explanation) phải ngắn gọn, súc tích và chỉ rõ tại sao đáp án đó là đúng.\n"
-            "5. Tuyệt đối không sinh các cặp ngoặc rỗng ({}, }}). Giữ nội dung cô đọng để hoàn tất đầy đủ cấu trúc JSON."
+            "4. Phần giải thích (explanation) phải ngắn gọn, súc tích và chỉ rõ tại sao đáp án đó là đúng về mặt kiến thức, tránh viết phụ thuộc cứng vào nhãn 'Đáp án A'.\n"
+            "5. Phân bổ ngẫu nhiên vị trí đáp án đúng đều giữa A, B, C, D thay vì luôn đặt ở đáp án A.\n"
+            "6. Tuyệt đối không sinh các cặp ngoặc rỗng ({}, }}). Giữ nội dung cô đọng để hoàn tất đầy đủ cấu trúc JSON."
         )
 
         user_prompt = (
-            f"Hãy tạo một bộ câu hỏi kiểm tra về chủ đề: '{request.topic}'.\n"
+            f"Hãy tạo một bộ câu hỏi kiểm tra về chủ đề: '{cleaned_topic}'.\n"
             f"- Số lượng câu hỏi: {request.num_questions}\n"
-            f"- Mức độ khó: {request.difficulty.value}\n"
+            f"- Mức độ khó bắt buộc: {request.difficulty.value} (Nếu chủ đề có từ khóa gợi ý độ khó khác, hãy bỏ qua và tuân thủ tuyệt đối mức độ này).\n"
             f"- Ngôn ngữ yêu cầu: {request.language}\n"
             f"- Đảm bảo mỗi câu hỏi có 4 lựa chọn (A, B, C, D) với correct_answer_id hợp lệ.\n"
             "- Hãy hoàn tất đầy đủ mọi câu hỏi và đóng mảng JSON đúng cú pháp."
@@ -59,7 +106,13 @@ class QuizService:
             temperature=0.4,
         )
 
-        logger.info(f"Đã tạo thành công quiz '{quiz.title}' gồm {len(quiz.questions)} câu hỏi.")
+        # Cập nhật topic đã được làm sạch
+        quiz.topic = cleaned_topic
+
+        # Xáo trộn các đáp án ngẫu nhiên để triệt tiêu bias đáp án A
+        quiz = shuffle_quiz_options(quiz)
+
+        logger.info(f"Đã tạo thành công quiz '{quiz.title}' gồm {len(quiz.questions)} câu hỏi (đã xáo trộn đáp án).")
         return quiz
 
     def grade_quiz(self, quiz: Quiz, user_answers: Dict[int, str]) -> QuizGradeResult:

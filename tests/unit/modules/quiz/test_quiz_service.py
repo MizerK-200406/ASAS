@@ -10,7 +10,12 @@ from asas.modules.quiz.schemas import (
     QuizOption,
     QuizQuestion,
 )
-from asas.modules.quiz.service import QuizService, QuizGradeResult
+from asas.modules.quiz.service import (
+    QuizGradeResult,
+    QuizService,
+    sanitize_topic,
+    shuffle_quiz_options,
+)
 
 
 @pytest.fixture
@@ -141,4 +146,84 @@ async def test_evaluate_quiz_with_agent(sample_quiz):
     )
     assert result == "mock_eval_result"
     mock_evaluator.evaluate_quiz.assert_called_once()
+
+
+def test_sanitize_topic():
+    """Kiểm tra loại bỏ các từ khóa chỉ mức độ nếu người dùng nhập kèm trong chủ đề."""
+    assert sanitize_topic("Python Basics nâng cao") == "Python Basics"
+    assert sanitize_topic("Toán 12 mức độ khó") == "Toán 12"
+    assert sanitize_topic("Giải tích (Dễ)") == "Giải tích"
+    assert sanitize_topic("Machine Learning - Hard") == "Machine Learning"
+    assert sanitize_topic("Lịch sử Việt Nam level easy") == "Lịch sử Việt Nam"
+    assert sanitize_topic("Hóa học hữu cơ cơ bản") == "Hóa học hữu cơ"
+    # Các chủ đề thông thường không bị xóa nhầm
+    assert sanitize_topic("Cơ học lượng tử") == "Cơ học lượng tử"
+    assert sanitize_topic("Deep Learning") == "Deep Learning"
+
+
+def test_shuffle_quiz_options_preserves_correctness():
+    """Kiểm tra việc xáo trộn đáp án: bảo toàn nội dung đáp án đúng và cập nhật correct_answer_id chính xác."""
+    # Giả lập bài thi 10 câu, tất cả ban đầu đáp án đúng đều nằm ở A (vấn đề bias của LLM)
+    questions = []
+    for i in range(10):
+        questions.append(
+            QuizQuestion(
+                question=f"Câu hỏi số {i + 1}?",
+                options=[
+                    QuizOption(id="A", text=f"Đáp án ĐÚNG {i}"),
+                    QuizOption(id="B", text=f"Đáp án sai 1 {i}"),
+                    QuizOption(id="C", text=f"Đáp án sai 2 {i}"),
+                    QuizOption(id="D", text=f"Đáp án sai 3 {i}"),
+                ],
+                correct_answer_id="A",
+                explanation="Giải thích chi tiết",
+            )
+        )
+
+    quiz = Quiz(title="Test Quiz", topic="Test Topic", questions=questions)
+    shuffled_quiz = shuffle_quiz_options(quiz)
+
+    correct_ids_found = set()
+    for i, q in enumerate(shuffled_quiz.questions):
+        # Đảm bảo các option vẫn mang mã định danh chuẩn A, B, C, D
+        assert [opt.id for opt in q.options] == ["A", "B", "C", "D"]
+
+        # Tìm option tương ứng với correct_answer_id mới
+        correct_opt = next(opt for opt in q.options if opt.id == q.correct_answer_id)
+        # Đảm bảo nội dung đáp án đúng không bị sai lệch
+        assert correct_opt.text == f"Đáp án ĐÚNG {i}"
+
+        correct_ids_found.add(q.correct_answer_id)
+
+    # Với 10 câu được xáo trộn ngẫu nhiên, xác suất tất cả vẫn là 'A' là cực kỳ nhỏ (1 / 4^10 ~ 1/1,000,000)
+    # Xác nhận các đáp án đã được phân tán ra nhiều vị trí khác nhau
+    assert len(correct_ids_found) > 1
+
+
+@pytest.mark.asyncio
+async def test_generate_quiz_overrides_topic_difficulty_keyword(mock_llm_client, sample_quiz):
+    """Kiểm tra khi người dùng nhập 'chủ đề + độ khó' thì hệ thống làm sạch và ưu tiên độ khó đã chọn."""
+    mock_llm_client.structured_output.return_value = sample_quiz
+    service = QuizService(llm_client=mock_llm_client)
+
+    # Người dùng nhập chủ đề 'Python nâng cao' nhưng lại chọn difficulty = EASY
+    request = QuizGenerationRequest(
+        topic="Python nâng cao",
+        num_questions=2,
+        difficulty=DifficultyLevel.EASY,
+        language="vi",
+    )
+
+    result = await service.generate_quiz(request)
+
+    # Chủ đề của bài thi đã được làm sạch về 'Python'
+    assert result.topic == "Python"
+
+    # Kiểm tra prompt gửi tới LLM ưu tiên mức độ EASY và hướng dẫn bỏ qua gợi ý trong tên gốc
+    called_kwargs = mock_llm_client.structured_output.call_args.kwargs
+    messages = called_kwargs["messages"]
+    user_prompt = messages[1]["content"]
+
+    assert "chủ đề: 'Python'" in user_prompt
+    assert "Mức độ khó bắt buộc: easy" in user_prompt
 
