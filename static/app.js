@@ -1,6 +1,7 @@
 /**
  * ASAS Frontend Application Logic
  * Modern Pedagogical Assessment & Isolated Device Profile Management
+ * Built with Robust Async Lifecycle, Cancellation Tokens & State Guards
  */
 
 document.addEventListener("DOMContentLoaded", () => {
@@ -15,6 +16,12 @@ document.addEventListener("DOMContentLoaded", () => {
     userAnswers: {}, // { questionIndex: optionId }
     timerInterval: null,
     secondsElapsed: 0,
+
+    // Async Lifecycle & Cancellation Controls
+    activeQuizRequestId: 0,
+    activeGradeRequestId: 0,
+    quizGenerateAbortController: null,
+    quizGradeAbortController: null,
   };
 
   // Main Views
@@ -53,6 +60,7 @@ document.addEventListener("DOMContentLoaded", () => {
   const quizForm = document.getElementById("quizForm");
   const topicInput = document.getElementById("topicInput");
   const numQuestionsSelect = document.getElementById("numQuestions");
+  const btnGenerate = document.getElementById("btnGenerate");
 
   // Active Quiz Elements
   const quizSourceBadge = document.getElementById("quizSourceBadge");
@@ -83,7 +91,7 @@ document.addEventListener("DOMContentLoaded", () => {
   const btnViewHistoryFromResult = document.getElementById("btnViewHistoryFromResult");
 
   // ---------------------------------------------------------------------------
-  // 2. View Switcher Helper
+  // 2. View Switcher & Zero-Delay Cleanup Helpers
   // ---------------------------------------------------------------------------
   function showView(view) {
     authSection.classList.add("hidden");
@@ -97,6 +105,27 @@ document.addEventListener("DOMContentLoaded", () => {
     else if (view === "loading") loadingView.classList.remove("hidden");
     else if (view === "quiz") quizSection.classList.remove("hidden");
     else if (view === "result") resultSection.classList.remove("hidden");
+  }
+
+  function abortPendingRequests() {
+    if (state.quizGenerateAbortController) {
+      try { state.quizGenerateAbortController.abort(); } catch (e) {}
+      state.quizGenerateAbortController = null;
+    }
+    if (state.quizGradeAbortController) {
+      try { state.quizGradeAbortController.abort(); } catch (e) {}
+      state.quizGradeAbortController = null;
+    }
+  }
+
+  function clearActiveQuizState() {
+    clearInterval(state.timerInterval);
+    state.currentQuiz = null;
+    state.userAnswers = {};
+    state.secondsElapsed = 0;
+    if (questionsContainer) {
+      questionsContainer.innerHTML = "";
+    }
   }
 
   // ---------------------------------------------------------------------------
@@ -123,7 +152,6 @@ document.addEventListener("DOMContentLoaded", () => {
       const students = await response.json();
       state.students = students;
 
-      // Kiểm tra nếu đã có tài khoản được lưu trong phiên và tài khoản đó thuộc thiết bị này
       if (state.currentStudentId) {
         const found = students.find((st) => st.student_id === state.currentStudentId);
         if (found) {
@@ -132,7 +160,6 @@ document.addEventListener("DOMContentLoaded", () => {
         }
       }
 
-      // Chưa đăng nhập hoặc tài khoản không tồn tại trên máy này -> mở màn hình chọn/tạo tài khoản
       renderAuthGate();
     } catch (err) {
       console.error("Lỗi khởi tạo hồ sơ học sinh:", err);
@@ -141,18 +168,19 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
   function renderAuthGate() {
+    abortPendingRequests();
+    clearActiveQuizState();
+
     state.currentStudentId = "";
     state.currentStudent = null;
     localStorage.removeItem("asas_student_id");
 
-    // Cập nhật navbar ở trạng thái khách
     userNavActions.classList.add("hidden");
     guestNavNotice.classList.remove("hidden");
 
     showView("auth");
 
     if (state.students && state.students.length > 0) {
-      // Trường hợp 1: Đã có 1 hoặc nhiều tài khoản trên máy này
       accountSelectBox.classList.remove("hidden");
       accountCreateBox.classList.add("hidden");
       btnCancelCreateAccount.classList.remove("hidden");
@@ -177,7 +205,6 @@ document.addEventListener("DOMContentLoaded", () => {
         studentAccountsList.appendChild(card);
       });
     } else {
-      // Trường hợp 2: Máy này chưa có tài khoản nào -> mở trực tiếp form đăng ký
       accountSelectBox.classList.add("hidden");
       accountCreateBox.classList.remove("hidden");
       createAccountTitle.textContent = "Chào mừng! Hãy tạo hồ sơ học sinh trên thiết bị này";
@@ -186,30 +213,32 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
   function loginAs(student) {
+    // Khi đăng nhập tài khoản mới, hủy sạch toàn bộ request cũ còn sót lại
+    abortPendingRequests();
+    clearActiveQuizState();
+
     state.currentStudentId = student.student_id;
     state.currentStudent = student;
     localStorage.setItem("asas_student_id", student.student_id);
 
-    // Cập nhật navbar
     guestNavNotice.classList.add("hidden");
     userNavActions.classList.remove("hidden");
     navStudentName.textContent = student.name;
     navStudentId.textContent = `#${student.student_id}`;
 
-    // Chuyển vào màn hình cấu hình bài thi
     showView("config");
   }
 
   function logout() {
+    abortPendingRequests();
+    clearActiveQuizState();
     renderAuthGate();
   }
 
-  // Chuyển đổi tài khoản
   btnSwitchAccount.addEventListener("click", () => {
     logout();
   });
 
-  // Mở form tạo tài khoản mới từ màn hình chọn
   btnShowCreateAccount.addEventListener("click", () => {
     accountSelectBox.classList.add("hidden");
     accountCreateBox.classList.remove("hidden");
@@ -217,13 +246,11 @@ document.addEventListener("DOMContentLoaded", () => {
     btnCancelCreateAccount.classList.remove("hidden");
   });
 
-  // Hủy form tạo tài khoản mới -> quay lại danh sách
   btnCancelCreateAccount.addEventListener("click", () => {
     accountCreateBox.classList.add("hidden");
     accountSelectBox.classList.remove("hidden");
   });
 
-  // Xử lý nộp form tạo học sinh mới
   authCreateForm.addEventListener("submit", async (e) => {
     e.preventDefault();
     const studentId = authStudentId.value.trim();
@@ -255,9 +282,7 @@ document.addEventListener("DOMContentLoaded", () => {
       }
 
       const created = await response.json();
-      
-      // Thêm vào danh sách local nếu chưa có
-      const existingIdx = state.students.findIndex(s => s.student_id === created.student_id);
+      const existingIdx = state.students.findIndex((s) => s.student_id === created.student_id);
       if (existingIdx >= 0) {
         state.students[existingIdx] = created;
       } else {
@@ -362,7 +387,7 @@ document.addEventListener("DOMContentLoaded", () => {
   });
 
   // ---------------------------------------------------------------------------
-  // 6. Quiz Generation Request
+  // 6. Quiz Generation Request (với AbortController & State Guards)
   // ---------------------------------------------------------------------------
   quizForm.addEventListener("submit", async (e) => {
     e.preventDefault();
@@ -375,9 +400,27 @@ document.addEventListener("DOMContentLoaded", () => {
     const topic = topicInput.value.trim();
     if (!topic) return;
 
+    // 1. Hủy bỏ bất kỳ request tạo câu hỏi nào đang chạy ngầm trước đó
+    if (state.quizGenerateAbortController) {
+      state.quizGenerateAbortController.abort();
+    }
+    state.quizGenerateAbortController = new AbortController();
+
+    // 2. Ghi nhận sequence requestId và snapshot ID học sinh yêu cầu
+    const currentRequestId = ++state.activeQuizRequestId;
+    const requestingStudentId = state.currentStudentId;
+
+    // 3. Dọn sạch DOM và state của câu hỏi cũ ngay lập tức (Zero-delay cleanup)
+    clearActiveQuizState();
+
     const numQuestions = parseInt(numQuestionsSelect.value, 10);
     const difficultyEl = document.querySelector('input[name="difficulty"]:checked');
     const difficulty = difficultyEl ? difficultyEl.value : "medium";
+
+    if (btnGenerate) {
+      btnGenerate.disabled = true;
+      btnGenerate.querySelector(".spinner")?.classList.remove("hidden");
+    }
 
     showView("loading");
     document.getElementById("loadingText").textContent = `Đang thiết kế đề thi: "${topic}"...`;
@@ -387,6 +430,7 @@ document.addEventListener("DOMContentLoaded", () => {
       const response = await fetch("/api/v1/quiz/generate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
+        signal: state.quizGenerateAbortController.signal,
         body: JSON.stringify({
           topic: topic,
           num_questions: numQuestions,
@@ -402,6 +446,17 @@ document.addEventListener("DOMContentLoaded", () => {
       }
 
       const quizData = await response.json();
+
+      // State Guard: Chỉ render khi request này đúng là request mới nhất và người dùng chưa đổi tài khoản
+      if (currentRequestId !== state.activeQuizRequestId) {
+        console.warn("Bỏ qua kết quả tạo quiz cũ do đã có yêu cầu mới hơn.");
+        return;
+      }
+      if (state.currentStudentId !== requestingStudentId) {
+        console.warn("Bỏ qua kết quả tạo quiz do người dùng đã chuyển tài khoản.");
+        return;
+      }
+
       state.currentQuiz = quizData;
       state.userAnswers = {};
 
@@ -409,8 +464,19 @@ document.addEventListener("DOMContentLoaded", () => {
       showView("quiz");
       startTimer();
     } catch (err) {
-      alert(`Không thể tạo đề thi: ${err.message}`);
-      showView("config");
+      if (err.name === "AbortError") {
+        console.info("Yêu cầu tạo đề thi đã bị hủy bởi thao tác mới.");
+        return;
+      }
+      if (currentRequestId === state.activeQuizRequestId) {
+        alert(`Không thể tạo đề thi: ${err.message}`);
+        showView("config");
+      }
+    } finally {
+      if (currentRequestId === state.activeQuizRequestId && btnGenerate) {
+        btnGenerate.disabled = false;
+        btnGenerate.querySelector(".spinner")?.classList.add("hidden");
+      }
     }
   });
 
@@ -470,7 +536,6 @@ document.addEventListener("DOMContentLoaded", () => {
         </div>
       `;
 
-      // Event listener cho từng phương án
       card.querySelectorAll(".option-item").forEach((optEl) => {
         optEl.addEventListener("click", () => {
           card.querySelectorAll(".option-item").forEach((item) => item.classList.remove("selected"));
@@ -485,13 +550,14 @@ document.addEventListener("DOMContentLoaded", () => {
 
   btnCancelQuiz.addEventListener("click", () => {
     if (confirm("Bạn có chắc chắn muốn hủy bỏ bài thi đang làm?")) {
-      clearInterval(state.timerInterval);
+      abortPendingRequests();
+      clearActiveQuizState();
       showView("config");
     }
   });
 
   // ---------------------------------------------------------------------------
-  // 8. Chấm điểm & Đánh giá bài thi
+  // 8. Chấm điểm & Đánh giá bài thi (với AbortController & State Guards)
   // ---------------------------------------------------------------------------
   btnSubmitQuiz.addEventListener("click", async () => {
     if (!state.currentQuiz) return;
@@ -505,6 +571,17 @@ document.addEventListener("DOMContentLoaded", () => {
     }
 
     clearInterval(state.timerInterval);
+
+    // 1. Hủy bất kỳ request chấm điểm nào đang chạy trước đó
+    if (state.quizGradeAbortController) {
+      state.quizGradeAbortController.abort();
+    }
+    state.quizGradeAbortController = new AbortController();
+
+    // 2. Ghi nhận sequence requestId và snapshot ID học sinh đang chấm
+    const currentGradeRequestId = ++state.activeGradeRequestId;
+    const gradingStudentId = state.currentStudentId;
+
     btnSubmitQuiz.disabled = true;
     btnSubmitQuiz.querySelector(".spinner").classList.remove("hidden");
     btnSubmitQuiz.querySelector(".btn-text").textContent = "Đang chấm điểm & đánh giá...";
@@ -513,6 +590,7 @@ document.addEventListener("DOMContentLoaded", () => {
       const response = await fetch("/api/v1/quiz/grade", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
+        signal: state.quizGradeAbortController.signal,
         body: JSON.stringify({
           quiz: state.currentQuiz,
           user_answers: state.userAnswers,
@@ -527,14 +605,33 @@ document.addEventListener("DOMContentLoaded", () => {
       }
 
       const gradeResult = await response.json();
+
+      // State Guard: Tuyệt đối không cho phép kết quả của tài khoản cũ hiển thị nếu người dùng đã chuyển tài khoản
+      if (currentGradeRequestId !== state.activeGradeRequestId) {
+        console.warn("Bỏ qua kết quả đánh giá cũ do đã có yêu cầu chấm điểm mới hơn.");
+        return;
+      }
+      if (state.currentStudentId !== gradingStudentId) {
+        console.warn("Bỏ qua kết quả đánh giá do tài khoản học sinh đã thay đổi.");
+        return;
+      }
+
       renderResults(gradeResult);
       showView("result");
     } catch (err) {
-      alert(`Lỗi nộp bài: ${err.message}`);
+      if (err.name === "AbortError") {
+        console.info("Yêu cầu chấm điểm đã bị hủy do chuyển tài khoản/hủy bài.");
+        return;
+      }
+      if (currentGradeRequestId === state.activeGradeRequestId) {
+        alert(`Lỗi nộp bài: ${err.message}`);
+      }
     } finally {
-      btnSubmitQuiz.disabled = false;
-      btnSubmitQuiz.querySelector(".spinner").classList.add("hidden");
-      btnSubmitQuiz.querySelector(".btn-text").textContent = "📤 Nộp bài & Xem đánh giá";
+      if (currentGradeRequestId === state.activeGradeRequestId) {
+        btnSubmitQuiz.disabled = false;
+        btnSubmitQuiz.querySelector(".spinner").classList.add("hidden");
+        btnSubmitQuiz.querySelector(".btn-text").textContent = "📤 Nộp bài & Xem đánh giá";
+      }
     }
   });
 
@@ -546,15 +643,12 @@ document.addEventListener("DOMContentLoaded", () => {
     scorePercentage.textContent = `${pct}%`;
     scoreRatio.textContent = `${res.correct_count}/${res.total_questions} đúng`;
 
-    // Vòng tròn điểm số conic-gradient
     scoreCircle.style.background = `conic-gradient(var(--primary-600) ${pct}%, var(--primary-100) ${pct}%)`;
 
-    // Telemetry pill
     const dur = res.duration_ms ? `${Math.round(res.duration_ms)}ms` : "0ms";
     const tok = res.total_tokens !== undefined && res.total_tokens !== null ? res.total_tokens : 0;
     telemetryBadge.textContent = `⏱️ ${dur} | 🪙 ${tok} Tokens`;
 
-    // Source badge
     if (res.source === "bank") {
       resultSourceBadge.textContent = "⚡ Nguồn: Kho CSDL (0 Token)";
       resultSourceBadge.className = "badge badge-success";
@@ -567,7 +661,6 @@ document.addEventListener("DOMContentLoaded", () => {
     if (evalRes) {
       document.getElementById("evaluatorContainer").classList.remove("hidden");
 
-      // Strengths
       if (evalRes.strengths && evalRes.strengths.length > 0) {
         strengthsBox.classList.remove("hidden");
         strengthsList.innerHTML = evalRes.strengths.map((s) => `<li>${escapeHtml(s)}</li>`).join("");
@@ -575,7 +668,6 @@ document.addEventListener("DOMContentLoaded", () => {
         strengthsBox.classList.add("hidden");
       }
 
-      // Gaps
       if (evalRes.knowledge_gaps && evalRes.knowledge_gaps.length > 0) {
         gapsBox.classList.remove("hidden");
         gapsList.innerHTML = evalRes.knowledge_gaps.map((g) => `<li>${escapeHtml(g)}</li>`).join("");
@@ -583,10 +675,8 @@ document.addEventListener("DOMContentLoaded", () => {
         gapsBox.classList.add("hidden");
       }
 
-      // Critique
       critiqueText.textContent = evalRes.critique || "Bạn đã hoàn thành tốt bài kiểm tra.";
 
-      // Recommendations
       if (evalRes.recommendations && evalRes.recommendations.length > 0) {
         recommendationsBox.classList.remove("hidden");
         recommendationsList.innerHTML = evalRes.recommendations.map((r) => `<li>${escapeHtml(r)}</li>`).join("");
@@ -594,7 +684,6 @@ document.addEventListener("DOMContentLoaded", () => {
         recommendationsBox.classList.add("hidden");
       }
 
-      // Plan
       if (evalRes.improvement_plan) {
         planBox.classList.remove("hidden");
         planText.textContent = evalRes.improvement_plan;
@@ -605,7 +694,6 @@ document.addEventListener("DOMContentLoaded", () => {
       document.getElementById("evaluatorContainer").classList.add("hidden");
     }
 
-    // Render Review Questions
     reviewQuestionsContainer.innerHTML = "";
     (res.details || []).forEach((d, idx) => {
       const card = document.createElement("div");
@@ -657,7 +745,15 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
   btnRetake.addEventListener("click", () => {
+    abortPendingRequests();
+    clearActiveQuizState();
+    reviewQuestionsContainer.innerHTML = "";
     showView("config");
+  });
+
+  // Hủy tất cả các request đang chạy ngầm khi người dùng F5 hoặc đóng tab
+  window.addEventListener("beforeunload", () => {
+    abortPendingRequests();
   });
 
   // ---------------------------------------------------------------------------
@@ -666,9 +762,7 @@ document.addEventListener("DOMContentLoaded", () => {
   function cleanOptionText(text, optId) {
     if (!text) return "";
     let cleaned = text.trim();
-    // 1. Loại bỏ tiền tố A., B), C: hoặc A -
     cleaned = cleaned.replace(/^\s*\[?[A-Fa-f0-9]\]?[\.\:\)\-\–\s]+\s*/, "");
-    // 2. Loại bỏ chữ cái đáp án dính liền vào từ viết hoa tiếp theo (ví dụ ANormalization -> Normalization)
     if (optId && cleaned.startsWith(optId) && cleaned.length > 1) {
       const secondChar = cleaned.charAt(1);
       if (secondChar === secondChar.toUpperCase() && secondChar !== secondChar.toLowerCase()) {
