@@ -1,9 +1,9 @@
 import json
 import re
-from typing import Any, Dict, List, Optional, Type, TypeVar
-from openai import AsyncOpenAI, APIError
-from pydantic import BaseModel, ValidationError
+from typing import Any, Dict, List, Optional, Tuple, Type, TypeVar
 from loguru import logger
+from openai import APIError, AsyncOpenAI
+from pydantic import BaseModel, ValidationError
 
 from asas.core.config import Settings, get_settings
 from asas.core.telemetry import (
@@ -14,22 +14,31 @@ from asas.core.telemetry import (
     estimate_tokens,
     track_latency,
 )
+from asas.core.tools import Tool, ToolRegistry
 
 T = TypeVar("T", bound=BaseModel)
 
 
 class LLMClientError(Exception):
     """Lỗi chung xảy ra trong quá trình tương tác với LLM."""
+
     pass
 
 
 class LLMParseError(LLMClientError):
     """Lỗi khi không thể parse phản hồi từ LLM sang cấu trúc Schema mong muốn."""
+
     pass
 
 
 class LLMClient:
-    """Wrapper quản lý kết nối và gọi API tới LLM (tương thích OpenAI / NVIDIA NIM)."""
+    """Wrapper quản lý kết nối và gọi API tới LLM (tương thích OpenAI / NVIDIA NIM).
+
+    Tích hợp sẵn:
+    - Structured Outputs với Pydantic và Feedback Loop tự sửa lỗi.
+    - Native Function Calling / Tool Calling dự phòng cho tương lai.
+    - Telemetry theo dõi chi phí Token và Latency.
+    """
 
     settings: Settings
     client: AsyncOpenAI
@@ -111,7 +120,7 @@ class LLMClient:
                     if (top == "{" and char == "}") or (top == "[" and char == "]"):
                         stack.pop()
 
-            escape = (char == "\\" and not escape)
+            escape = char == "\\" and not escape
 
         repaired = text
         if in_string:
@@ -185,6 +194,87 @@ class LLMClient:
                 logger.error(f"Lỗi không xác định khi gọi LLM: {e}")
                 raise LLMClientError(f"Unexpected Error: {str(e)}") from e
 
+    async def chat_with_tools(
+        self,
+        messages: List[Dict[str, Any]],
+        tools: Optional[List[Tool]] = None,
+        tool_registry: Optional[ToolRegistry] = None,
+        model: Optional[str] = None,
+        temperature: float = 0.2,
+        max_tokens: int = 2048,
+        session_id: Optional[str] = None,
+        student_id: Optional[str] = None,
+        action_type: str = "chat_with_tools",
+    ) -> Tuple[str, List[Dict[str, Any]]]:
+        """Gửi prompt kèm danh sách Tools cho LLM, hỗ trợ native function calling."""
+        target_model = model or self.settings.default_model
+
+        # Chuẩn bị danh sách tools định dạng OpenAI
+        openai_tools = None
+        if tool_registry:
+            openai_tools = tool_registry.to_openai_tools()
+        elif tools:
+            openai_tools = [t.to_openai_tool() for t in tools]
+
+        async with track_latency(action_type) as latency:
+            try:
+                call_kwargs: Dict[str, Any] = {
+                    "model": target_model,
+                    "messages": messages,
+                    "temperature": temperature,
+                    "max_tokens": max_tokens,
+                }
+                if openai_tools:
+                    call_kwargs["tools"] = openai_tools
+                    call_kwargs["tool_choice"] = "auto"
+
+                response = await self.client.chat.completions.create(**call_kwargs)
+                message = response.choices[0].message
+                content = message.content or ""
+                raw_tool_calls = getattr(message, "tool_calls", None) or []
+
+                tool_calls: List[Dict[str, Any]] = []
+                for tc in raw_tool_calls:
+                    fn = getattr(tc, "function", None)
+                    if fn:
+                        tool_calls.append({
+                            "id": getattr(tc, "id", ""),
+                            "name": getattr(fn, "name", ""),
+                            "arguments": getattr(fn, "arguments", "{}"),
+                        })
+
+                # Ghi nhận telemetry
+                usage = getattr(response, "usage", None)
+                if usage and hasattr(usage, "prompt_tokens") and isinstance(usage.prompt_tokens, int):
+                    tokens = TokenUsage(
+                        prompt_tokens=usage.prompt_tokens,
+                        completion_tokens=getattr(usage, "completion_tokens", 0) or 0,
+                        total_tokens=getattr(usage, "total_tokens", 0) or 0,
+                    )
+                else:
+                    p_len = sum(estimate_tokens(str(m.get("content", ""))) for m in messages)
+                    c_len = estimate_tokens(content)
+                    tokens = TokenUsage(prompt_tokens=p_len, completion_tokens=c_len, total_tokens=p_len + c_len)
+
+                rec = LLMExecutionRecord(
+                    session_id=session_id,
+                    student_id=student_id,
+                    model_name=target_model,
+                    action_type=action_type,
+                    tokens=tokens,
+                    latency=latency,
+                )
+                self.last_execution_record = rec
+                self.usage_tracker.record(rec)
+
+                return content.strip(), tool_calls
+            except APIError as e:
+                logger.error(f"Lỗi API khi gọi LLM với Tools: {e}")
+                raise LLMClientError(f"API Error: {str(e)}") from e
+            except Exception as e:
+                logger.error(f"Lỗi không xác định khi gọi LLM với Tools: {e}")
+                raise LLMClientError(f"Unexpected Error: {str(e)}") from e
+
     async def structured_output(
         self,
         messages: List[Dict[str, str]],
@@ -197,7 +287,7 @@ class LLMClient:
         student_id: Optional[str] = None,
         action_type: str = "structured_output",
     ) -> T:
-        """Gửi prompt và ép kiểu đầu ra khớp chính xác với Pydantic Model đã chỉ định kèm telemetry."""
+        """Gửi prompt và ép kiểu đầu ra khớp chính xác với Pydantic Model kèm Feedback Loop tự sửa lỗi."""
         target_model = model or self.settings.default_model
 
         # Hướng dẫn bổ sung schema vào system prompt để tối đa độ chính xác
@@ -280,16 +370,16 @@ class LLMClient:
 
                     try:
                         validated = response_model.model_validate_json(clean_text)
-                    except (json.JSONDecodeError, ValidationError):
-                        # Kích hoạt cơ chế tự động sửa lỗi JSON bị cắt cụt
+                    except (json.JSONDecodeError, ValidationError) as parse_err:
+                        # Kích hoạt cơ chế tự động sửa lỗi JSON bị cắt cụt làm tầng bảo hiểm
                         repaired_text = self._repair_truncated_json(raw_text)
                         if repaired_text != clean_text:
                             try:
                                 validated = response_model.model_validate_json(repaired_text)
                             except (json.JSONDecodeError, ValidationError):
-                                raise
+                                raise parse_err
                         else:
-                            raise
+                            raise parse_err
 
                     # Ghi nhận record telemetry khi thành công
                     rec = LLMExecutionRecord(
@@ -308,11 +398,16 @@ class LLMClient:
                     last_error = e
                     if attempt == 0:
                         logger.warning(
-                            f"[LLMClient] Lần 1 không thể parse JSON ({e}). Tự động thử lại với lời nhắc xuất JSON trực tiếp..."
+                            f"[LLMClient:SelfCorrection] Lần 1 không thể parse JSON ({e}). Áp dụng Feedback Loop tự sửa lỗi cho lần 2..."
                         )
+                        # Cơ chế Self-Correction Feedback Loop: Cung cấp lỗi cụ thể để model tự sửa lại
+                        formatted_messages.append({"role": "assistant", "content": raw_text})
                         formatted_messages.append({
                             "role": "user",
-                            "content": "LƯU Ý QUAN TRỌNG: Hãy bỏ qua toàn bộ suy nghĩ (reasoning) dài dòng. Xuất NGAY LẬP TỨC toàn bộ dữ liệu dưới dạng JSON hợp lệ theo schema.",
+                            "content": (
+                                f"LƯU Ý QUAN TRỌNG: Dữ liệu JSON bạn vừa trả về bị lỗi sau: {str(e)}.\n"
+                                "Hãy bỏ qua toàn bộ suy nghĩ (reasoning) dài dòng. Xuất NGAY LẬP TỨC toàn bộ dữ liệu dưới dạng JSON hợp lệ theo đúng schema đã yêu cầu."
+                            ),
                         })
                         current_temp = 0.1
                         continue

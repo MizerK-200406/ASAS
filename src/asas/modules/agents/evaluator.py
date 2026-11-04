@@ -1,9 +1,17 @@
-"""Evaluator Agent implementation for general evaluation and quiz knowledge gap analysis."""
+"""Tác tử Đánh giá & Cố vấn Sư phạm (EvaluatorAgent).
+
+Chuyên trách:
+- Đánh giá bài thi và phân tích nguyên nhân ngộ nhận lý thuyết.
+- Xác định điểm mạnh (strengths) và lỗ hổng kiến thức (knowledge_gaps).
+- Đưa ra lời khuyên (recommendations) và kế hoạch hành động sư phạm (improvement_plan).
+"""
 
 from typing import Any, Dict, List, Optional
 from loguru import logger
 
 from asas.core.llm_client import LLMClient
+from asas.core.tools import Tool
+from asas.modules.agents.base import BaseAgent
 from asas.modules.agents.schemas import AgentResponse, AgentRole, EvaluationResult
 from asas.modules.quiz.schemas import Quiz, QuizGradeResult
 
@@ -18,17 +26,23 @@ QUY TẮC ĐẶC BIỆT:
 - Nếu học sinh trả lời đúng 100% số câu hỏi, KHÔNG đưa ra lời khuyên (recommendations = []) và KHÔNG xem xét lỗ hổng kiến thức (knowledge_gaps = [], improvement_plan = null). Chỉ cần ghi nhận điểm mạnh và đưa ra lời khen ngợi sư phạm."""
 
 
-class EvaluatorAgent:
-    """Tác tử Đánh giá dùng chung cho toàn bộ hệ thống ASAS."""
+class EvaluatorAgent(BaseAgent):
+    """Tác tử Đánh giá Sư phạm chuyên sâu dùng chung cho toàn bộ hệ thống ASAS."""
 
     def __init__(
         self,
         llm_client: Optional[LLMClient] = None,
         system_prompt: Optional[str] = None,
+        model: Optional[str] = None,
+        tools: Optional[List[Tool]] = None,
     ) -> None:
-        self.role = AgentRole.EVALUATOR
-        self.llm_client = llm_client or LLMClient()
-        self.system_prompt = system_prompt or EVALUATOR_SYSTEM_PROMPT
+        super().__init__(
+            role=AgentRole.EVALUATOR,
+            system_prompt=system_prompt or EVALUATOR_SYSTEM_PROMPT,
+            llm_client=llm_client,
+            model=model,
+            tools=tools,
+        )
 
     async def evaluate_general(
         self,
@@ -44,11 +58,11 @@ class EvaluatorAgent:
             {"role": "system", "content": self.system_prompt},
             {"role": "user", "content": prompt},
         ]
-        model = getattr(getattr(self.llm_client, "settings", None), "evaluator_model", None)
+        target_model = self.get_target_model()
         return await self.llm_client.structured_output(
             messages=messages,
             response_model=EvaluationResult,
-            model=model,
+            model=target_model,
             temperature=0.2,
         )
 
@@ -65,7 +79,7 @@ class EvaluatorAgent:
         # Nếu học sinh đúng 100% câu trả lời: không cần đưa ra lời khuyên hay tìm lỗ hổng kiến thức
         if grade_result.total_questions > 0 and grade_result.correct_count == grade_result.total_questions:
             logger.info(
-                f"[EvaluatorAgent] Học sinh '{name}' đạt điểm tối đa 100% "
+                f"[{self.role.value}] Học sinh '{name}' đạt điểm tối đa 100% "
                 f"({grade_result.correct_count}/{grade_result.total_questions}). "
                 "Bỏ qua phân tích lỗ hổng kiến thức và lời khuyên."
             )
@@ -128,12 +142,12 @@ class EvaluatorAgent:
             {"role": "user", "content": prompt},
         ]
 
-        logger.info(f"[EvaluatorAgent] Bắt đầu đánh giá lỗ hổng kiến thức Quiz cho {name}...")
-        model = getattr(getattr(self.llm_client, "settings", None), "evaluator_model", None)
+        logger.info(f"[{self.role.value}] Bắt đầu đánh giá lỗ hổng kiến thức Quiz cho {name}...")
+        target_model = self.get_target_model()
         evaluation = await self.llm_client.structured_output(
             messages=messages,
             response_model=EvaluationResult,
-            model=model,
+            model=target_model,
             temperature=0.2,
         )
         return evaluation

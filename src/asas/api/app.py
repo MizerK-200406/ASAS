@@ -12,6 +12,7 @@ from asas.api.v1.router import api_v1_router
 from asas.core.config import get_settings
 from asas.core.llm_client import LLMClient
 from asas.modules.agents.evaluator import EvaluatorAgent
+from asas.modules.agents.generator import QuizGeneratorAgent
 from asas.modules.memory.service import MemoryService
 from asas.modules.quiz.service import QuizService
 
@@ -26,12 +27,15 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     await memory_service.initialize()
     app.state.memory_service = memory_service
 
-    # Khởi tạo EvaluatorAgent & QuizService (kèm memory_service cho Question Bank)
+    # Khởi tạo GeneratorAgent, EvaluatorAgent & QuizService (kèm memory_service cho Question Bank)
     llm_client = LLMClient()
+    generator_agent = QuizGeneratorAgent(llm_client=llm_client)
     evaluator_agent = EvaluatorAgent(llm_client=llm_client)
+    app.state.generator_agent = generator_agent
     app.state.evaluator_agent = evaluator_agent
     app.state.quiz_service = QuizService(
         llm_client=llm_client,
+        generator_agent=generator_agent,
         evaluator_agent=evaluator_agent,
         memory_service=memory_service,
     )

@@ -10,6 +10,7 @@ from asas.modules.memory.schemas import utc_now
 class AgentRole(str, Enum):
     """Vai trò của tác tử trong hệ thống."""
 
+    GENERATOR = "generator"
     EVALUATOR = "evaluator"
 
 
